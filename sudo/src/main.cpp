@@ -199,7 +199,12 @@ static void FreeArgvNew(char **argvNew)
  */
 static bool IsElf(const std::string& path)
 {
-    std::ifstream file(path, std::ios::binary);
+    char canonicalPath[PATH_MAX] = { 0 };
+    if (realpath(path.c_str(), canonicalPath) == nullptr) {
+        return false;
+    }
+
+    std::ifstream file(canonicalPath, std::ios::binary);
     if (!file) {
         return false;
     }
