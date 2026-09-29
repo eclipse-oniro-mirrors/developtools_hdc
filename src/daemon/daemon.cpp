@@ -609,7 +609,7 @@ bool HdcDaemon::HandDaemonAuthPubkey(HSession hSession, const uint32_t channelId
             WRITE_LOG(LOG_FATAL, "get pubkey failed for %s", sessionIdMaskStr.c_str());
             break;
         }
-        if (AlreadyInKnownHosts(pubkey)) {
+        if (AlreadyInKnownHosts(pubkey) || ShouldAutoAcceptPubkeyForEncrypt(hSession)) {
             ret = true;
             break;
         }
@@ -854,13 +854,37 @@ bool HdcDaemon::HandDaemonAuthBypass(void)
     return Base::Trim(authbypass) == "1";
 }
 
+bool HdcDaemon::ShouldSkipAuthBypassForEncrypt(HSession hSession)
+{
+#ifdef HDC_SUPPORT_ENCRYPT_TCP
+    if (hSession->connType == CONN_TCP && hSession->supportEncrypt) {
+        WRITE_LOG(LOG_INFO, "encrypt-tcp negotiated, skip auth bypass for %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool HdcDaemon::ShouldAutoAcceptPubkeyForEncrypt(HSession hSession)
+{
+#ifdef HDC_SUPPORT_ENCRYPT_TCP
+    if (!authEnable && hSession->connType == CONN_TCP && hSession->supportEncrypt) {
+        WRITE_LOG(LOG_INFO, "auto-accept host pubkey for encrypt-tcp in bypass mode for %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return true;
+    }
+#endif
+    return false;
+}
+
 bool HdcDaemon::HandDaemonAuth(HSession hSession, const uint32_t channelId, SessionHandShake &handshake)
 {
     int connectValidationStatus = HdcValidation::GetConnectValidationParam();
     bool connectstatus = (connectValidationStatus == VALIDATION_HDC_DAEMON
         || connectValidationStatus == VALIDATION_HDC_HOST_AND_DAEMON);
  
-    if (!connectstatus && !authEnable) {
+    if (!connectstatus && !authEnable && !ShouldSkipAuthBypassForEncrypt(hSession)) {
         WRITE_LOG(LOG_INFO, "not enable secure, allow access for %s",
             Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
         UpdateSessionAuthOk(hSession->sessionId);
