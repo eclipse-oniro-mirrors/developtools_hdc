@@ -119,7 +119,7 @@ namespace Base {
     {
         string tmpString = GetFileNameAny(debugInfo);
         debugInfo = StringFormat("%s:%d", tmpString.c_str(), line);
-       if (!IsLoggable(LOG_DEBUG)) {
+        if (!IsLoggable(LOG_DEBUG)) {
             debugInfo = "";
             threadIdString = "";
         } else {
