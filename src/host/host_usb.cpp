@@ -94,7 +94,7 @@ static void UsbLogHandler(libusb_context* ctx, enum libusb_log_level level, cons
         default:
             break;
     }
-    if (l >= 0) {
+    if (l >= 0 && Base::IsLoggable(static_cast<uint8_t>(l))) {
         char *newStr = strdup(str);
         if (!newStr) {
             return;
@@ -115,40 +115,34 @@ static void UsbLogHandler(libusb_context* ctx, enum libusb_log_level level, cons
 
 libusb_log_level HdcHostUSB::GetLibusbLogLevel(void)
 {
-    libusb_log_level debugLevel;
-
-    switch (static_cast<Hdc::HdcLogLevel>(Base::GetLogLevel())) {
-        case LOG_WARN:
-            debugLevel = LIBUSB_LOG_LEVEL_ERROR;
-            break;
-        case LOG_INFO:
-            debugLevel = LIBUSB_LOG_LEVEL_WARNING;
-            break;
-        case LOG_DEBUG:
-            debugLevel = LIBUSB_LOG_LEVEL_INFO;
-            break;
-        case LOG_VERBOSE:
-            debugLevel = LIBUSB_LOG_LEVEL_DEBUG;
-            break;
-        case LOG_FATAL:
-            // pass through to no libusb logging
-        default:
-            debugLevel = LIBUSB_LOG_LEVEL_NONE;
-            break;
-    }
-    return debugLevel;
+    return GetLibusbLogLevel(Base::GetLogLevel());
 }
 
-void HdcHostUSB::SetLibusbLogLevelEnv(libusb_log_level logLevel)
+libusb_log_level HdcHostUSB::GetLibusbLogLevel(uint8_t logLevel)
 {
-    std::string debugEnv = "LIBUSB_DEBUG";
-#ifdef _WIN32
-    debugEnv += "=";
-    debugEnv += std::to_string(logLevel);
-    _putenv(debugEnv.c_str());
-#else
-    setenv(debugEnv.c_str(), std::to_string(logLevel).c_str(), 1);
-#endif
+    switch (static_cast<Hdc::HdcLogLevel>(logLevel)) {
+        case LOG_FATAL:
+            return LIBUSB_LOG_LEVEL_ERROR;
+        case LOG_WARN:
+            return LIBUSB_LOG_LEVEL_WARNING;
+        case LOG_INFO:
+            return LIBUSB_LOG_LEVEL_INFO;
+        case LOG_DEBUG:
+        case LOG_ALL:
+        case LOG_VERBOSE:
+            return LIBUSB_LOG_LEVEL_DEBUG;
+        case LOG_OFF:
+        default:
+            return LIBUSB_LOG_LEVEL_NONE;
+    }
+}
+ 
+int HdcHostUSB::SetLibusbLogLevel(void)
+{
+    if (ctxUSB == nullptr) {
+        return LIBUSB_ERROR_INVALID_PARAM;
+    }
+    return libusb_set_option(ctxUSB, LIBUSB_OPTION_LOG_LEVEL, GetLibusbLogLevel());
 }
 
 void HdcHostUSB::InitLogging(void *ctxUSB)

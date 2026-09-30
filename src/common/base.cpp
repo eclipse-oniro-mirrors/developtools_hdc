@@ -70,15 +70,15 @@ namespace Base {
 #endif
     uint8_t GetLogLevel()
     {
-        return g_logLevel;
+        return g_logLevel.load(std::memory_order_relaxed);
     }
 #ifndef HDC_HILOG
     std::atomic<bool> g_logCache = true;
 #endif
-    uint8_t g_logLevel = LOG_DEBUG;  // tmp set,now debugmode.LOG_OFF when release;;
+    std::atomic<uint8_t> g_logLevel {LOG_DEBUG};  // Startup configuration may override the existing default.
     void SetLogLevel(const uint8_t logLevel)
     {
-        g_logLevel = logLevel;
+        g_logLevel.store(logLevel, std::memory_order_relaxed);
     }
 
     uint8_t GetLogLevelByEnv()
@@ -119,7 +119,7 @@ namespace Base {
     {
         string tmpString = GetFileNameAny(debugInfo);
         debugInfo = StringFormat("%s:%d", tmpString.c_str(), line);
-        if (g_logLevel < LOG_DEBUG) {
+       if (!IsLoggable(LOG_DEBUG)) {
             debugInfo = "";
             threadIdString = "";
         } else {
@@ -152,7 +152,7 @@ namespace Base {
                 break;
         }
         string msTimeSurplus;
-        if (g_logLevel >= LOG_DEBUG) {
+        if (IsLoggable(LOG_DEBUG)) {
             const auto sSinceUnix0Rest = duration_cast<milliseconds>(sinceUnix0).count() % TIME_BASE;
             msTimeSurplus = StringFormat(".%03llu", sSinceUnix0Rest);
         }
@@ -787,7 +787,7 @@ static void EchoLog(string &buf)
 
     void PrintLogEx(const char *functionName, int line, uint8_t logLevel, const char *msg, ...)
     {
-        if (logLevel > g_logLevel) {
+        if (!IsLoggable(logLevel)) {
             return;
         }
 

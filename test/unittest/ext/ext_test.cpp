@@ -16,7 +16,10 @@
 
 #include <fstream>
 #include <sys/stat.h>
+#include <atomic>
 #include <chrono>
+#include <thread>
+#include <vector>
 #include "base.h"
 #include "circle_buffer.h"
 #include "compress.h"
@@ -99,6 +102,106 @@ HWTEST_F(HdcExtTest, 3, TestSize.Level0)
     EXPECT_EQ(logLevel, Base::GetLogLevel());
 }
 
+/**
+ * TestParseLogLevelBoundaries
+ * Verify dynamic log-level parsing accepts exactly one digit in [0, 6].
+ */
+HWTEST_F(HdcExtTest, 99, TestSize.Level0)
+{
+    uint8_t level = LOG_OFF;
+    for (uint8_t expected = LOG_OFF; expected <= LOG_LAST; ++expected) {
+        std::string input(1, static_cast<char>('0' + expected));
+        EXPECT_TRUE(Base::ParseLogLevel(input, level));
+        EXPECT_EQ(level, expected);
+    }
+ 
+    const std::vector<std::string> invalidLevels = {
+        "", "7", "-1", "debug", "3 extra", "03", " 3", "3 "
+    };
+    for (const auto &input : invalidLevels) {
+        level = LOG_INFO;
+        EXPECT_FALSE(Base::ParseLogLevel(input, level)) << input;
+        EXPECT_EQ(level, LOG_INFO) << input;
+    }
+}
+ 
+/**
+ * TestGetLogLevelName
+ * Verify all public numeric levels have stable display names.
+ */
+HWTEST_F(HdcExtTest, 100, TestSize.Level0)
+{
+    const std::vector<std::string> expected = {
+        "off", "fatal", "warn", "info", "debug", "all", "verbose"
+    };
+    for (uint8_t level = LOG_OFF; level <= LOG_LAST; ++level) {
+        EXPECT_EQ(Base::GetLogLevelName(level), expected[level]);
+    }
+    EXPECT_EQ(Base::GetLogLevelName(LOG_LAST + 1), "unknown");
+}
+ 
+/**
+ * TestConcurrentLogLevelAccess
+ * Verify concurrent runtime-level readers only observe valid atomic values.
+ */
+HWTEST_F(HdcExtTest, 101, TestSize.Level0)
+{
+    uint8_t originalLevel = Base::GetLogLevel();
+    std::atomic<bool> start {false};
+    std::atomic<uint32_t> invalidValueCount {0};
+    constexpr int iterationCount = 10000;
+    constexpr int readerCount = 4;
+    std::vector<std::thread> readers;
+    readers.reserve(readerCount);
+ 
+    for (int reader = 0; reader < readerCount; ++reader) {
+        readers.emplace_back([&start, &invalidValueCount]() {
+            while (!start.load(std::memory_order_acquire)) {
+            }
+            for (int index = 0; index < iterationCount; ++index) {
+                invalidValueCount.fetch_add(Base::GetLogLevel() > LOG_LAST, std::memory_order_relaxed);
+            }
+        });
+    }
+ 
+    start.store(true, std::memory_order_release);
+    for (int index = 0; index < iterationCount; ++index) {
+        Base::SetLogLevel(static_cast<uint8_t>(index % (LOG_LAST + 1)));
+    }
+    for (auto &reader : readers) {
+        reader.join();
+    }
+ 
+    EXPECT_EQ(invalidValueCount.load(std::memory_order_relaxed), 0);
+    Base::SetLogLevel(LOG_VERBOSE);
+    EXPECT_EQ(Base::GetLogLevel(), LOG_VERBOSE);
+    Base::SetLogLevel(originalLevel);
+}
+ 
+/**
+ * TestWriteLogCallSiteFilter
+ * Verify suppressed log arguments are not evaluated and enabled arguments are evaluated once.
+ */
+HWTEST_F(HdcExtTest, 102, TestSize.Level0)
+{
+    uint8_t originalLevel = Base::GetLogLevel();
+    int evaluationCount = 0;
+    auto sideEffect = [&evaluationCount]() {
+        return ++evaluationCount;
+    };
+ 
+    Base::SetLogLevel(LOG_WARN);
+    EXPECT_FALSE(Base::IsLoggable(LOG_DEBUG));
+    WRITE_LOG(LOG_DEBUG, "suppressed side effect:%d", sideEffect());
+    EXPECT_EQ(evaluationCount, 0);
+ 
+    Base::SetLogLevel(LOG_DEBUG);
+    EXPECT_TRUE(Base::IsLoggable(LOG_DEBUG));
+    WRITE_LOG(LOG_DEBUG, "enabled side effect:%d", sideEffect());
+    EXPECT_EQ(evaluationCount, 1);
+    Base::SetLogLevel(originalLevel);
+}
+ 
 /**
  * TestGetTimeString
  * Verify the GetTimeString function.

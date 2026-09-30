@@ -20,6 +20,7 @@
 
 #include "memory_pool.h"
 
+namespace Hdc {
 namespace {
 static constexpr int SECONDS_TIMEOUT = 5;
 
@@ -53,15 +54,13 @@ void CloseIoFd(int epollFd, int ioFd)
 {
 #if !defined(HDC_HOST) || defined(HOST_OHOS)
     if ((ioFd > 0) && (epoll_ctl(epollFd, EPOLL_CTL_DEL, ioFd, nullptr) == -1)) {
-        Hdc::WRITE_LOG(Hdc::LOG_INFO, "EPOLL_CTL_DEL fail fd:%d epollFd:%d errno:%d",
+        WRITE_LOG(LOG_INFO, "EPOLL_CTL_DEL fail fd:%d epollFd:%d errno:%d",
             ioFd, epollFd, errno);
     }
     close(epollFd);
 #endif
 }
 } // namespace
-
-namespace Hdc {
 
 FileIoThread::FileIoThread(HdcFileDescriptor* ptr)
 {

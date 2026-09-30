@@ -15,11 +15,19 @@
 #ifndef __H_HDC_LOG_H__
 #define __H_HDC_LOG_H__
 
+#include <atomic>
 #include <cinttypes>
 
 namespace Hdc {
 
 namespace Base {
+    extern std::atomic<uint8_t> g_logLevel;
+ 
+    inline bool IsLoggable(uint8_t logLevel) noexcept
+    {
+        return logLevel <= g_logLevel.load(std::memory_order_relaxed);
+    }
+
     void PrintLogEx(const char *functionName, int line, uint8_t logLevel, const char *msg, ...);
 }
 
@@ -35,10 +43,17 @@ enum HdcLogLevel {
 };
 
 #ifdef IS_RELEASE_VERSION
-#define WRITE_LOG(level, fmt, ...)   Base::PrintLogEx(__FUNCTION__, __LINE__, level, fmt, ##__VA_ARGS__)
+#define HDC_LOG_FUNCTION_NAME __FUNCTION__
 #else
-#define WRITE_LOG(level, fmt, ...)   Base::PrintLogEx(__FILE_NAME__, __LINE__, level, fmt, ##__VA_ARGS__)
+#define HDC_LOG_FUNCTION_NAME __FILE_NAME__
 #endif
+
+#define WRITE_LOG(level, fmt, ...) do { \
+    const uint8_t hdcLogLevel = static_cast<uint8_t>(level); \
+    if (Base::IsLoggable(hdcLogLevel)) { \
+        Base::PrintLogEx(HDC_LOG_FUNCTION_NAME, __LINE__, hdcLogLevel, fmt, ##__VA_ARGS__); \
+    } \
+} while (0)
 
 #ifndef HDC_HOST
 #define WRITE_LOG_DAEMON(level, fmt, ...) WRITE_LOG(level, fmt, ##__VA_ARGS__)

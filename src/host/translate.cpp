@@ -28,10 +28,30 @@ static bool IsWholeCommandOrHasParameter(const string &input, const string &comm
     return input[command.size()] == ' ' || input[command.size()] == '\0';
 }
 
+static bool ParseServerCommand(const string &input, FormatCommand *outCmd)
+{
+    if (!strncmp(input.c_str(), CMDSTR_CHECK_SERVER.c_str(), CMDSTR_CHECK_SERVER.size())) {
+        outCmd->cmdFlag = CMD_CHECK_SERVER;
+        return true;
+    }
+    if (!IsWholeCommandOrHasParameter(input, CMDSTR_SERVER_LOG_LEVEL)) {
+        return false;
+    }
+ 
+    outCmd->cmdFlag = CMD_SERVER_LOG_LEVEL;
+    size_t parameterBegin = CMDSTR_SERVER_LOG_LEVEL.size();
+    while (parameterBegin < input.size() && input[parameterBegin] == ' ') {
+        ++parameterBegin;
+    }
+    if (parameterBegin < input.size() && input[parameterBegin] != '\0') {
+        outCmd->parameters = input.c_str() + parameterBegin;
+    }
+    return true;
+}
+
 string Usage()
 {
-    string ret = "";
-    ret = "\n                         OpenHarmony device connector(hdc) ...\n\n"
+    string ret = "\n                         OpenHarmony device connector(hdc) ...\n\n"
             "---------------------------------global commands:----------------------------------\n"
             " -h/help [verbose]                     - Print hdc help, 'verbose' for more other cmds\n"
             " -v/version                            - Print hdc version\n"
@@ -172,8 +192,7 @@ string Verbose()
         " checkdevice key                       - Check given serial port is properly and whether\n"
         "                                         any devices are connected(only uart)\n"
         " any                                   - Try to connect the first ready device(only uart)\n"
-        "\n"
-        "---------------------------------component commands:-------------------------------\n"
+        "\n---------------------------------component commands:-------------------------------\n"
         "session commands(on server):\n"
         " discover                              - Discover devices listening on TCP via LAN broadcast\n"
         " list targets [-v]                     - List all devices status, -v for detail\n"
@@ -191,6 +210,7 @@ string Verbose()
         "\n"
 #endif
         " reconnect connectkey                  - Reconnect USB device, reset session and re-enumerate\n"
+        " server loglevel [0-6]                 - Query or set the host server runtime log level\n"
         " start [-r]                            - Start server. If with '-r', will be restart server\n"
         " kill [-r]                             - Kill server. If with '-r', will be restart server\n"
 #ifdef __OHOS__
@@ -504,8 +524,8 @@ string String2FormatCommand(const char *inputRaw, int sizeInputRaw, FormatComman
         outCmd->cmdFlag = CMD_SERVER_KILL;
     }
 #endif
-    else if (!strncmp(input.c_str(), CMDSTR_CHECK_SERVER.c_str(), CMDSTR_CHECK_SERVER.size())) {
-        outCmd->cmdFlag = CMD_CHECK_SERVER;
+    else if (ParseServerCommand(input, outCmd)) {
+        // The helper fully populates the host-local command.
     } else if (!strncmp(input.c_str(), CMDSTR_CHECK_DEVICE.c_str(), CMDSTR_CHECK_DEVICE.size())) {
         outCmd->parameters = input.c_str() + CMDSTR_CHECK_DEVICE.size() + 1;  // with ' '
         outCmd->cmdFlag = CMD_CHECK_DEVICE;
