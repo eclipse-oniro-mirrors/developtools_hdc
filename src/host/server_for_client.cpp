@@ -927,8 +927,9 @@ bool HdcServerForClient::DoServerLogLevel(HChannel hChannel, const string &param
  
     Base::SetLogLevel(newLevel);
     HdcServer *ptrServer = static_cast<HdcServer *>(clsServer);
-    if (ptrServer->clsUSBClt != nullptr) {
-        int usbResult = ptrServer->clsUSBClt->SetLibusbLogLevel();
+    HdcUSBClient *usbClt = ptrServer->clsUSBClt;
+    if (usbClt != nullptr) {
+        int usbResult = usbClt->SetLibusbLogLevel();
         if (usbResult != LIBUSB_SUCCESS) {
             WRITE_LOG(LOG_WARN, "Set libusb log level failed:%d", usbResult);
         }
