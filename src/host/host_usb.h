@@ -43,7 +43,6 @@ public:
     static libusb_log_level GetLibusbLogLevel(void);
     static libusb_log_level GetLibusbLogLevel(uint8_t logLevel);
     int SetLibusbLogLevel(void);
-    static void SetLibusbLogLevelEnv(libusb_log_level logLevel);
     void SendSoftResetToDaemon(HSession hSession, uint32_t sessionIdOld);
     static void WatchUsbNodeChange(HdcHostUSB *thisClass);
     void ReviewUsbNodeLater(const string &nodeKey, UsbCheckStatus status = UsbCheckStatus::HOST_USB_IGNORE);
