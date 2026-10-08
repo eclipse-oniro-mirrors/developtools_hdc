@@ -77,6 +77,31 @@ config("hdc_config") {
   }
 }
 
+if (build_selinux && product_name != "ohos-sdk" && support_jsapi) {
+  ohos_shared_library("hdc_account_adapter") {
+    branch_protector_ret = "pac_ret"
+    stack_protector_ret = true
+    sanitize = {
+      cfi = true
+      cfi_cross_dso = true
+      cfi_vcall_icall_only = true
+      debug = false
+    }
+    sources = [ "src/daemon/daemon_account.cpp" ]
+    configs = [ ":hdc_config" ]
+    external_deps = [
+      "ipc:ipc_single",
+      "os_account:os_account_innerkits",
+      "os_account:account_iam_innerkits",
+    ]
+    version_script = "src/daemon/libhdc_account_adapter.map"
+    output_name = "hdc_account_adapter"
+    install_images = [ "system" ]
+    subsystem_name = "developtools"
+    part_name = "hdc"
+  }
+}
+
 template("hdcd_source_set") {
   forward_variables_from(invoker, "*")
 
@@ -110,7 +135,8 @@ template("hdcd_source_set") {
       "MEMORY_POOL_ENABLE"
     ]
 
-    if (!support_jsapi) {
+    if (!build_selinux || image_name != "system" || product_name == "ohos-sdk" ||
+        !support_jsapi) {
       defines += [ "HDC_NO_ACCOUNT" ]
     }
 
@@ -157,14 +183,6 @@ template("hdcd_source_set") {
       "openssl:libcrypto_shared",
       "openssl:libssl_shared",
     ]
-
-    if (build_selinux && image_name == "system" && product_name != "ohos-sdk" && support_jsapi) {
-      external_deps += [
-        "ipc:ipc_single",
-        "os_account:os_account_innerkits",
-        "os_account:account_iam_innerkits",
-      ]
-    }
 
     if (build_selinux) {
       external_deps += [ "selinux:libselinux" ]
@@ -372,6 +390,10 @@ template("build_hdc") {
 
   ohos_prebuilt_executable("hdcd_${image_name}") {
     deps = [ ":hdcd_${image_name}_exe" ]
+    if (image_name == "system" && build_selinux && product_name != "ohos-sdk" &&
+        support_jsapi) {
+      deps += [ ":hdc_account_adapter" ]
+    }
     output = "${image_name}/hdcd"
     install_enable = true
     subsystem_name = "developtools"
