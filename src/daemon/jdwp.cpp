@@ -162,7 +162,7 @@ void HdcJdwp::FreeContext(HCtxJdwp ctx)
     {
         std::unique_lock<std::mutex> lock(mutex);
         ctx->finish = true;
-        WRITE_LOG(LOG_INFO, "FreeContext for targetPID :%d", ctx->pid);
+        // No log: both callers (ReadStream, AcceptClient) already reported the pid and the reason.
         if (!stop) {
             AdminContext(OP_REMOVE, ctx->pid, nullptr);
         }
@@ -224,7 +224,7 @@ void HdcJdwp::RemoveFdFromPollList(uint32_t pid)
 {
     for (auto &&pair : pollNodeMap) {
         if (pair.second.ppid == pid) {
-            WRITE_LOG(LOG_INFO, "RemoveFdFromPollList for pid:%d.", pid);
+            // No log: internal bookkeeping on the same per-process-exit path the caller reports.
             pollNodeMap.erase(pair.second.pollfd.fd);
             break;
         }
@@ -240,11 +240,17 @@ void HdcJdwp::ReadStream(uv_stream_t *pipe, ssize_t nread, const uv_buf_t *buf)
     std::call_once(firstLog, [&]() { SystemDepend::SetDevItem("persist.hdc.jdwp", "0"); });
     
     bool ret = true;
+    bool isEof = false;
     if (nread == UV_ENOBUFS) {  // It is definite enough, usually only 4 bytes
         ret = false;
         WRITE_LOG(LOG_DEBUG, "HdcJdwp::ReadStream IOBuf max");
     } else if (nread == 0) {
         return;
+    } else if (nread == UV_EOF) {
+        // Peer closed the control pipe: the normal way to learn that a process exited, not a bad
+        // packet. Fires once per debuggable process, so it must not log per event.
+        ret = false;
+        isEof = true;
 #ifdef JS_JDWP_CONNECT
     } else if (nread < signed(JS_PKG_MIN_SIZE + sizeof(JsMsgHeader)) ||
                nread > signed(JS_PKG_MAX_SIZE + sizeof(JsMsgHeader))) {
@@ -307,7 +313,10 @@ void HdcJdwp::ReadStream(uv_stream_t *pipe, ssize_t nread, const uv_buf_t *buf)
     }
     (void)memset_s(ctxJdwp->buf, sizeof(ctxJdwp->buf), 0, sizeof(ctxJdwp->buf));
     if (!ret) {
-        WRITE_LOG(LOG_INFO, "ReadStream proc:%u err, free it.", ctxJdwp->pid);
+        // EOF means the process exited: expected, once per debuggable process, so stay silent.
+        if (!isEof) {
+            WRITE_LOG(LOG_INFO, "ReadStream proc:%u err, free it.", ctxJdwp->pid);
+        }
         thisClass->FreeContext(ctxJdwp);
     }
 }
