@@ -913,7 +913,7 @@ bool HdcServerForClient::DoServerLogLevel(HChannel hChannel, const string &param
     uint8_t oldLevel = Base::GetLogLevel();
     if (parameters.empty()) {
         EchoClient(hChannel, MSG_OK, "Current server log level: %u (%s)", oldLevel,
-                   Base::GetLogLevelName(oldLevel));
+            Base::GetLogLevelName(oldLevel));
         hChannel->isSuccess = true;
         return false;
     }
@@ -927,7 +927,7 @@ bool HdcServerForClient::DoServerLogLevel(HChannel hChannel, const string &param
  
     Base::SetLogLevel(newLevel);
     HdcServer *ptrServer = static_cast<HdcServer *>(clsServer);
-    HdcUSBClient *usbClt = ptrServer->clsUSBClt;
+    HdcHostUSB *usbClt = ptrServer->clsUSBClt;
     if (usbClt != nullptr) {
         int usbResult = usbClt->SetLibusbLogLevel();
         if (usbResult != LIBUSB_SUCCESS) {
