@@ -210,7 +210,6 @@ string Verbose()
         "\n"
 #endif
         " reconnect connectkey                  - Reconnect USB device, reset session and re-enumerate\n"
-        " server loglevel [0-6]                 - Query or set the host server runtime log level\n"
         " start [-r]                            - Start server. If with '-r', will be restart server\n"
         " kill [-r]                             - Kill server. If with '-r', will be restart server\n"
 #ifdef __OHOS__
@@ -222,6 +221,7 @@ string Verbose()
         "                                         -o: specify the listen address\n"
         "                                         -N/-L: internal use only, do not specify\n"
         " killall-sub                           - Kill all subserver processes\n"
+        " server loglevel [0-6]                 - Query or set the host server runtime log level\n"
 #endif
         " -e ip                                 - Set the IP address for which the host listens during TCP\n"
         "                                         port forwarding. The default value is 127.0.0.1,\n"
