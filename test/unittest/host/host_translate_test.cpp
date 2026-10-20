@@ -342,6 +342,30 @@ HWTEST_F(HdcTranslateTest, TestServerLogLevelSetCommand, TestSize.Level0)
         EXPECT_EQ(formatCommand->parameters, std::to_string(level));
     }
 }
+ 
+HWTEST_F(HdcTranslateTest, TestServerLogLevelMultipleSpaces, TestSize.Level0)
+{
+    // Multiple spaces between command word and parameter must be skipped.
+    const std::string input = "server loglevel   5";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->parameters, "5");
+}
+
+HWTEST_F(HdcTranslateTest, TestServerLogLevelTrailingSpace, TestSize.Level0)
+{
+    // Trailing space after command word is treated as no-parameter query.
+    const std::string input = "server loglevel ";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->parameters, "");
+}
 
 HWTEST_F(HdcTranslateTest, TestServerLogLevelPrefixBoundary, TestSize.Level0)
 {
@@ -380,6 +404,8 @@ HWTEST_F(HdcTranslateTest, TestLibusbLogLevelMapping, TestSize.Level0)
         LIBUSB_LOG_LEVEL_ERROR,
         LIBUSB_LOG_LEVEL_WARNING,
         LIBUSB_LOG_LEVEL_INFO,
+        LIBUSB_LOG_LEVEL_DEBUG,
+        LIBUSB_LOG_LEVEL_DEBUG,
         LIBUSB_LOG_LEVEL_DEBUG,
     };
  
