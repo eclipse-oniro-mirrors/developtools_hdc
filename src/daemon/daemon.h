@@ -95,6 +95,8 @@ private:
 #endif
 
     bool HandDaemonAuthBypass(void);
+    bool ShouldSkipAuthBypassForEncrypt(HSession hSession);
+    bool ShouldAutoAcceptPubkeyForEncrypt(HSession hSession);
     void SendAuthSignMsg(SessionHandShake &handshake,
             uint32_t channelId, uint32_t sessionid, string pubkey, string token);
     void SendAuthMsg(SessionHandShake &handshake, const uint32_t channelId,
