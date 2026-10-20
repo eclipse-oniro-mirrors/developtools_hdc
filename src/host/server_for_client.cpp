@@ -946,7 +946,7 @@ bool HdcServerForClient::DoCommandLocal(HChannel hChannel, void *formatCommandIn
         case CMD_SERVER_LOG_LEVEL: {
             ret = DoServerLogLevel(hChannel, formatCommand->parameters);
             break;
-        }      
+        }
         case CMD_WAIT_FOR: {
             WRITE_LOG(LOG_DEBUG, "CMD_WAIT_FOR command");
             ret = !WaitForAny(hChannel);
