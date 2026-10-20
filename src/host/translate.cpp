@@ -525,8 +525,17 @@ string String2FormatCommand(const char *inputRaw, int sizeInputRaw, FormatComman
         outCmd->cmdFlag = CMD_SERVER_KILL;
     }
 #endif
-    else if (ParseServerCommand(input, outCmd)) {
-        // The helper fully populates the host-local command.
+    else if (!strncmp(input.c_str(), CMDSTR_CHECK_SERVER.c_str(), CMDSTR_CHECK_SERVER.size())) {
+        outCmd->cmdFlag = CMD_CHECK_SERVER;
+    } else if (IsWholeCommandOrHasParameter(input, CMDSTR_SERVER_LOG_LEVEL)) {
+        size_t parameterBegin = CMDSTR_SERVER_LOG_LEVEL.size();
+        while (parameterBegin < input.size() && input[parameterBegin] == ' ') {
+            ++parameterBegin;
+        }
+        if (parameterBegin < input.size() && input[parameterBegin] != '\0') {
+            outCmd->parameters = input.c_str() + parameterBegin;
+        }
+        outCmd->cmdFlag = CMD_SERVER_LOG_LEVEL;
     } else if (!strncmp(input.c_str(), CMDSTR_CHECK_DEVICE.c_str(), CMDSTR_CHECK_DEVICE.size())) {
         outCmd->parameters = input.c_str() + CMDSTR_CHECK_DEVICE.size() + 1;  // with ' '
         outCmd->cmdFlag = CMD_CHECK_DEVICE;
