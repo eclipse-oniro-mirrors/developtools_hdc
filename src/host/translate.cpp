@@ -86,6 +86,7 @@ string Usage()
             "                                         -i: specify the device serial number\n"
             "                                         -o: specify the listen address\n"
             " killall-sub                           - Kill all subserver processes\n"
+            " server loglevel [0-6]                 - Query or set the host server runtime log level\n"
 #endif
             "\n"
             "service commands(on daemon):\n"
