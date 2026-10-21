@@ -184,6 +184,10 @@ int AsyncCmd::ThreadFork(const string &command, const string &optionPath, int &c
         WRITE_LOG(LOG_FATAL, "Popen pipe failed errno:%d", errno);
         return ERR_GENERIC;
     }
+#ifdef HDC_HILOG
+    fdsan_exchange_owner_tag(fds[pipeRead], 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+    fdsan_exchange_owner_tag(fds[pipeWrite], 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+#endif
     WRITE_LOG(LOG_DEBUG, "Popen pipe fds[pipeRead]:%d fds[pipeWrite]:%d, mode %d",
         fds[pipeRead], fds[pipeWrite], isRoot);
 
@@ -199,8 +203,8 @@ int AsyncCmd::ThreadFork(const string &command, const string &optionPath, int &c
         dup2(fds[pipeRead], STDIN_FILENO);
         dup2(fds[pipeWrite], STDOUT_FILENO);
         dup2(fds[pipeWrite], STDERR_FILENO);
-        close(fds[pipeRead]);
-        close(fds[pipeWrite]);
+        Base::CloseFd(fds[pipeRead]);
+        Base::CloseFd(fds[pipeWrite]);
 
         setsid();
         setpgid(childPid, childPid);

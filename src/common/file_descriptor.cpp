@@ -56,7 +56,7 @@ void CloseIoFd(int epollFd, int ioFd)
         Hdc::WRITE_LOG(Hdc::LOG_INFO, "EPOLL_CTL_DEL fail fd:%d epollFd:%d errno:%d",
             ioFd, epollFd, errno);
     }
-    close(epollFd);
+    Hdc::Base::CloseFd(epollFd);
 #endif
 }
 } // namespace
@@ -83,6 +83,9 @@ void FileIoThread::Run()
 
 #if !defined(HDC_HOST) || defined(HOST_OHOS)
     int epollFd = epoll_create(EPOLL_SIZE);
+#ifdef HDC_HILOG
+    fdsan_exchange_owner_tag(epollFd, 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+#endif
     struct epoll_event ev;
     struct epoll_event events[EPOLL_SIZE];
     ev.data.fd = descriptor->fdIO;

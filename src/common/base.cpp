@@ -2587,7 +2587,15 @@ static void EchoLog(string &buf)
     {
         int rc = 0;
         if (fd > 0) {
+#ifdef HDC_HILOG
+            if (fdsan_get_owner_tag(fd) != 0) {
+                fdsan_close_with_tag(fd, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+            } else {
+                rc = close(fd);
+            }
+#else
             rc = close(fd);
+#endif
             if (rc < 0) {
                 char buffer[BUF_SIZE_DEFAULT] = { 0 };
 #ifdef _WIN32

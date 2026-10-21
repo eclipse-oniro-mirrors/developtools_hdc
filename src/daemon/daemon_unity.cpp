@@ -244,24 +244,28 @@ bool HdcDaemonUnity::CallRemount()
         WRITE_LOG(LOG_FATAL, "Failed to create pipe: %s", strerror(errno));
         return false;
     }
+#ifdef HDC_HILOG
+    fdsan_exchange_owner_tag(pipefd[0], 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+    fdsan_exchange_owner_tag(pipefd[1], 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+#endif
     pid = fork();
     if (pid < 0) {
-        close(pipefd[0]);
-        close(pipefd[1]);
+        Base::CloseFd(pipefd[0]);
+        Base::CloseFd(pipefd[1]);
         WRITE_LOG(LOG_FATAL, "Failed to fork: %s", strerror(errno));
         return false;
     }
     if (pid == 0) {
-        close(pipefd[0]);
+        Base::CloseFd(pipefd[0]);
         signal(SIGCHLD, SIG_DFL);
         exitStatus = system("remount");
         write(pipefd[1], &exitStatus, sizeof(int));
-        close(pipefd[1]);
+        Base::CloseFd(pipefd[1]);
         _exit(0);
     } else {
-        close(pipefd[1]);
+        Base::CloseFd(pipefd[1]);
         ssize_t bytesRead = read(pipefd[0], &exitStatus, sizeof(int));
-        close(pipefd[0]);
+        Base::CloseFd(pipefd[0]);
         waitpid(pid, nullptr, 0);
         if (bytesRead != sizeof(int)) {
             WRITE_LOG(LOG_FATAL, "Failed to read exit status from pipe");

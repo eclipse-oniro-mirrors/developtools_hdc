@@ -22,6 +22,7 @@
 #endif // LOG_DOMAIN
 
 #define LOG_DOMAIN 0xD002D13
+#define FDSAN_TAG ((uint64_t)0xD002D13 << 32 | 1)
 #ifdef LOG_TAG
 #undef LOG_TAG
 #endif // LOG_TAG

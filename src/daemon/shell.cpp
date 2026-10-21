@@ -221,12 +221,15 @@ int HdcShell::ChildForkDo(int pts, const ShellParams &params)
     dup2(pts, STDIN_FILENO);
     dup2(pts, STDOUT_FILENO);
     dup2(pts, STDERR_FILENO);
-    close(pts);
+    Base::CloseFd(pts);
     string text = "/proc/self/oom_score_adj";
     int fd = 0;
     if ((fd = open(text.c_str(), O_WRONLY)) >= 0) {
+#ifdef HDC_HILOG
+        fdsan_exchange_owner_tag(fd, 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+#endif
         write(fd, "0", 1);
-        close(fd);
+        Base::CloseFd(fd);
     }
 
 #if defined(HDC_SUPPORT_REPORT_COMMAND_EVENT)
@@ -342,11 +345,14 @@ void *HdcShell::ShellFork(void *arg)
         HdcShell::mutexPty.unlock();
         setsid();
         SetSelinuxLabel();
-        close(ptmParam);
+        Base::CloseFd(ptmParam);
         int pts = 0;
         if ((pts = open(devParam, O_RDWR | O_CLOEXEC)) < 0) {
             return reinterpret_cast<void *>(-1);
         }
+#ifdef HDC_HILOG
+        fdsan_exchange_owner_tag(pts, 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+#endif
         ChildForkDo(pts, params);
         // proc finish
     } else {
@@ -365,6 +371,9 @@ int HdcShell::CreateSubProcessPTY(const char *cmd, const char *arg0, const char 
         WRITE_LOG(LOG_DEBUG, "Cannot open ptmx, error:%s", buf);
         return ERR_FILE_OPEN;
     }
+#ifdef HDC_HILOG
+    fdsan_exchange_owner_tag(ptm, 0, fdsan_create_owner_tag(FDSAN_OWNER_TYPE_FILE, FDSAN_TAG));
+#endif
     if (grantpt(ptm) || unlockpt(ptm)) {
         constexpr int bufSize = 1024;
         char buf[bufSize] = { 0 };
