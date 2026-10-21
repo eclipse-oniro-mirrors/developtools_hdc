@@ -28,27 +28,6 @@ static bool IsWholeCommandOrHasParameter(const string &input, const string &comm
     return input[command.size()] == ' ' || input[command.size()] == '\0';
 }
 
-static bool ParseServerCommand(const string &input, FormatCommand *outCmd)
-{
-    if (!strncmp(input.c_str(), CMDSTR_CHECK_SERVER.c_str(), CMDSTR_CHECK_SERVER.size())) {
-        outCmd->cmdFlag = CMD_CHECK_SERVER;
-        return true;
-    }
-    if (!IsWholeCommandOrHasParameter(input, CMDSTR_SERVER_LOG_LEVEL)) {
-        return false;
-    }
- 
-    outCmd->cmdFlag = CMD_SERVER_LOG_LEVEL;
-    size_t parameterBegin = CMDSTR_SERVER_LOG_LEVEL.size();
-    while (parameterBegin < input.size() && input[parameterBegin] == ' ') {
-        ++parameterBegin;
-    }
-    if (parameterBegin < input.size() && input[parameterBegin] != '\0') {
-        outCmd->parameters = input.c_str() + parameterBegin;
-    }
-    return true;
-}
-
 string Usage()
 {
     string ret = "\n                         OpenHarmony device connector(hdc) ...\n\n"
