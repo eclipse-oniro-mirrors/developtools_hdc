@@ -187,7 +187,7 @@ ohos_source_set("hdc_daemon") {
   }
   external_deps = common_external_deps
   external_deps += [ "c_utils:utils" ]
-  if (product_name != "ohos-sdk") {
+  if (product_name != "ohos-sdk" && support_jsapi) {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -302,7 +302,7 @@ ohos_unittest("hdc_jdwp_unittest") {
     "hilog:libhilog",
   ]
 
-  if (product_name != "ohos-sdk") {
+  if (product_name != "ohos-sdk" && support_jsapi) {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -371,10 +371,10 @@ ohos_unittest("hdc_host_base_unittest") {
     "${hdc_path}/src/host/host_unity.cpp",
     "${hdc_path}/src/host/host_updater.cpp",
     "${hdc_path}/src/host/host_shell_option.cpp",
+    "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/translate.cpp",
     "${hdc_path}/src/common/server_cmd_log.cpp",
     "${hdc_path}/src/common/uart.cpp",
-    "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util_unix.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util_win.cpp",
@@ -462,7 +462,7 @@ ohos_unittest("hdc_daemon_base_unittest") {
     "libusb:libusb",
   ]
 
-  if (product_name != "ohos-sdk") {
+  if (product_name != "ohos-sdk" && support_jsapi) {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -506,7 +506,7 @@ ohos_unittest("hdc_shell_unittest") {
     "libusb:libusb",
   ]
 
-  if (product_name != "ohos-sdk") {
+  if (product_name != "ohos-sdk" && support_jsapi) {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
