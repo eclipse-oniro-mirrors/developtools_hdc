@@ -36,33 +36,58 @@ void HdcTCPBase::InitialChildClass(const bool serverOrDaemonIn, void *ptrMainBas
 void HdcTCPBase::RecvUDP(uv_udp_t *handle, ssize_t nread, const uv_buf_t *rcvbuf, const struct sockaddr *addr,
                          unsigned /* flags */)
 {
+    if (handle == nullptr) {
+        WRITE_LOG(LOG_FATAL, "RecvUDP handle is null");
+        return;
+    }
+    if (handle->data == nullptr) {
+        WRITE_LOG(LOG_FATAL, "RecvUDP handle->data is null");
+        return;
+    }
+    HdcTCPBase *thisClass = (HdcTCPBase *)handle->data;
+    // Taken before any early return, so the error paths below are visible to the loop monitor.
+    CALLSTAT_GUARD(((HdcSessionBase *)(thisClass->clsMainBase))->loopMainStatus,
+                   handle->loop, "HdcTCPBase::RecvUDP");
     while (true) {
-        HdcTCPBase *thisClass = (HdcTCPBase *)handle->data;
-        if (nread <= 0) {
-            // ==0 finish;<0 error
+        if (nread == 0) {
+            // libuv reports EAGAIN with nread == 0, this is the normal end of a drain.
             break;
         }
-        CALLSTAT_GUARD(((HdcSessionBase *)(thisClass->clsMainBase))->loopMainStatus,
-                       handle->loop, "HdcTCPBase::RecvUDP");
+        if (nread < 0) {
+            char errBuf[BUF_SIZE_TINY] = {0};
+            uv_strerror_r(static_cast<int>(nread), errBuf, sizeof(errBuf));
+            WRITE_LOG(LOG_WARN, "RecvUDP failed nread:%zd err:%s", nread, errBuf);
+            break;
+        }
+        if (rcvbuf == nullptr) {
+            WRITE_LOG(LOG_FATAL, "RecvUDP rcvbuf is null, nread:%zd", nread);
+            break;
+        }
+        if (rcvbuf->base == nullptr) {
+            WRITE_LOG(LOG_FATAL, "RecvUDP rcvbuf->base is null, nread:%zd rcvbuf->len:%zu", nread, rcvbuf->len);
+            break;
+        }
+        // The buffer is reused now, so terminate it here; %s and strstr() rely on it.
+        const_cast<char *>(rcvbuf->base)[nread] = '\0';
         WRITE_LOG(LOG_DEBUG, "RecvUDP %s", rcvbuf->base);
         if (strncmp(rcvbuf->base, HANDSHAKE_MESSAGE.c_str(), HANDSHAKE_MESSAGE.size())) {
             break;
         }
-        thisClass->RecvUDPEntry(addr, handle, rcvbuf);
+        // nread is the payload length; hand it down so callees need not rescan the buffer.
+        thisClass->RecvUDPEntry(addr, handle, rcvbuf, nread);
         break;
     }
-    delete[] (uint8_t*)rcvbuf->base;
+    // The buffer is no longer heap allocated, so there is nothing to release here.
 }
 
 void HdcTCPBase::AllocStreamUDP(uv_handle_t* /* handle */, size_t /* sizeWanted */, uv_buf_t *buf)
 {
-    size_t bufLen = BUF_SIZE_DEFAULT;
-    char *pRecvBuf = reinterpret_cast<char *>(new (std::nothrow) uint8_t[bufLen]());
-    if (!pRecvBuf) {
-        return;
-    }
-    buf->base = pRecvBuf;
-    buf->len = bufLen;
+    // Reused buffer: nothing to allocate, so this cannot fail and libuv never takes its
+    // ENOBUFS path. The last byte is reserved for the terminator added in RecvUDP.
+    // Valid only while recv_cb runs, callees must not keep the pointer.
+    static thread_local char recvBuf[BUF_SIZE_DEFAULT];
+    buf->base = recvBuf;
+    buf->len = sizeof(recvBuf) - 1;
 }
 
 void HdcTCPBase::SendUDPFinish(uv_udp_send_t *req, int /* status */)

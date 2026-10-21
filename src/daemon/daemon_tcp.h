@@ -15,6 +15,7 @@
 #ifndef HDC_DAEMON_TCP_H
 #define HDC_DAEMON_TCP_H
 #include <cstdint>
+#include <string>
 #include "uv.h"
 #include "uv/unix.h"
 #include "tcp.h"
@@ -25,7 +26,7 @@ class HdcDaemonTCP : public HdcTCPBase {
 public:
     HdcDaemonTCP(const bool serverOrDaemonIn, void *ptrMainBase);
     virtual ~HdcDaemonTCP();
-    void RecvUDPEntry(const sockaddr *addrSrc, uv_udp_t *handle, const uv_buf_t *rcvbuf) override;
+    void RecvUDPEntry(const sockaddr *addrSrc, uv_udp_t *handle, const uv_buf_t *rcvbuf, ssize_t nread) override;
     uint16_t tcpListenPort;
     int Initial();
     void Stop();
@@ -35,6 +36,11 @@ private:
     void TransmitConfig(const sockaddr *addrSrc, uv_udp_t *handle);
     int SetTCPListen();
     int SetUDPListen();
+    void BuildUDPReplyPayload();
+
+    // Built once the listen port is known and never modified afterwards, so the
+    // asynchronous send always refers to storage that outlives the request.
+    std::string udpReplyPayload;
 
     uv_tcp_t servTCP = {};
     uv_udp_t servUDP = {};
