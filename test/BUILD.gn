@@ -13,7 +13,7 @@
 import("//build/test.gni")
 import("//developtools/hdc/hdc.gni")
 hdc_path = "//developtools/hdc/"
-module_output_path = "developtools/hdc/"
+module_output_path = "hdc/hdc"
 declare_args() {
   hdc_unit_test = true
   hdc_fuzz_test = true
@@ -187,7 +187,7 @@ ohos_source_set("hdc_daemon") {
   }
   external_deps = common_external_deps
   external_deps += [ "c_utils:utils" ]
-  if (product_name != "ohos-sdk" && support_jsapi) {
+  if (product_name != "ohos-sdk") {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -302,7 +302,7 @@ ohos_unittest("hdc_jdwp_unittest") {
     "hilog:libhilog",
   ]
 
-  if (product_name != "ohos-sdk" && support_jsapi) {
+  if (product_name != "ohos-sdk") {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -371,10 +371,10 @@ ohos_unittest("hdc_host_base_unittest") {
     "${hdc_path}/src/host/host_unity.cpp",
     "${hdc_path}/src/host/host_updater.cpp",
     "${hdc_path}/src/host/host_shell_option.cpp",
-    "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/translate.cpp",
     "${hdc_path}/src/common/server_cmd_log.cpp",
     "${hdc_path}/src/common/uart.cpp",
+    "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util_unix.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util_win.cpp",
@@ -388,6 +388,7 @@ ohos_unittest("hdc_host_base_unittest") {
     "unittest/host/host_app_test.cpp",
     "unittest/host/host_uds_server_test.cpp",
     "unittest/host/host_fport_listen_ip_test.cpp",
+    "unittest/host/host_channel_payload_test.cpp",
     "unittest/host/host_receive_permit_test.cpp",
     "unittest/host/host_remove_forward_test.cpp",
     "unittest/host/host_shell_option_test.cpp",
@@ -461,7 +462,7 @@ ohos_unittest("hdc_daemon_base_unittest") {
     "libusb:libusb",
   ]
 
-  if (product_name != "ohos-sdk" && support_jsapi) {
+  if (product_name != "ohos-sdk") {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -505,7 +506,7 @@ ohos_unittest("hdc_shell_unittest") {
     "libusb:libusb",
   ]
 
-  if (product_name != "ohos-sdk" && support_jsapi) {
+  if (product_name != "ohos-sdk") {
     external_deps += [
       "ipc:ipc_single",
       "os_account:os_account_innerkits",
@@ -848,6 +849,7 @@ ohos_unittest("hdc_ext_unittest") {
     "${hdc_path}/src/common/heartbeat.cpp",
     "${hdc_path}/src/common/server_cmd_log.cpp",
     "${hdc_path}/src/common/auth.cpp",
+    "${hdc_path}/src/common/credential_message.cpp",
     "${hdc_path}/src/common/entry.cpp",
     "unittest/ext/ext_test.cpp",
   ]

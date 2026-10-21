@@ -392,8 +392,11 @@ HWTEST_F(HdcTranslateTest, TestServerLogLevelPreservesInvalidParameter, TestSize
  
 HWTEST_F(HdcTranslateTest, TestServerLogLevelHelp, TestSize.Level0)
 {
+#ifndef __OHOS__
+    // "server loglevel [0-6]" help text only exists on non-OHOS platforms (see Usage/Verbose).
     EXPECT_NE(TranslateCommand::Usage().find("server loglevel [0-6]"), string::npos);
     EXPECT_NE(TranslateCommand::Verbose().find("server loglevel [0-6]"), string::npos);
+#endif
     EXPECT_NE(TranslateCommand::Usage().find("-l[0-6]"), string::npos);
 }
  
