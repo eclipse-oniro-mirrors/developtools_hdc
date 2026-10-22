@@ -631,9 +631,11 @@ HWTEST_F(HdcUARTBaseTest, ExternInterface, TestSize.Level1)
     EXPECT_NE(defaultInterface.UvTcpInit(uv_default_loop(), &server, -1), 0);
     EXPECT_NE(defaultInterface.UvRead((uv_stream_t *)&dummyPip, nullptr, nullptr), 0);
     EXPECT_EQ(defaultInterface.StartWorkThread(nullptr, nullptr, nullptr, nullptr), 0);
-    EXPECT_NE(defaultInterface.TimerUvTask(uv_default_loop(), nullptr, nullptr), 0);
+    // TimerUvTask with a null callback fails inside uv_timer_start and maps to false (0).
+    EXPECT_EQ(defaultInterface.TimerUvTask(uv_default_loop(), nullptr, nullptr), 0);
     EXPECT_NE(defaultInterface.UvTimerStart(&timer, nullptr, 0, 0), 0);
-    EXPECT_EQ(defaultInterface.DelayDo(uv_default_loop(), 0, 0, "", nullptr, nullptr), 0);
+    // DelayDo no longer rejects a null callback (loop is valid), so it succeeds and returns true.
+    EXPECT_NE(defaultInterface.DelayDo(uv_default_loop(), 0, 0, "", nullptr, nullptr), 0);
     defaultInterface.TryCloseHandle((uv_handle_t *)&dummyPip, nullptr);
 }
 

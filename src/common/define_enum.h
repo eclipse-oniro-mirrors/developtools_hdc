@@ -152,6 +152,7 @@ enum HdcCommand {
     CMD_SERVER_KILL,  // channel kill, not use
     CMD_SERVICE_START = 17,
     CMD_KERNEL_TARGET_RECONNECT = 18,
+    CMD_SERVER_LOG_LEVEL = 19,
     CMD_SSL_HANDSHAKE = 20,
     // One-pass simple commands
     CMD_UNITY_COMMAND_HEAD = 1000,  // not use

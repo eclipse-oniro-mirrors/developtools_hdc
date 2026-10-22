@@ -30,8 +30,7 @@ static bool IsWholeCommandOrHasParameter(const string &input, const string &comm
 
 string Usage()
 {
-    string ret = "";
-    ret = "\n                         OpenHarmony device connector(hdc) ...\n\n"
+    string ret = "\n                         OpenHarmony device connector(hdc) ...\n\n"
             "---------------------------------global commands:----------------------------------\n"
             " -h/help [verbose]                     - Print hdc help, 'verbose' for more other cmds\n"
             " -v/version                            - Print hdc version\n"
@@ -66,6 +65,7 @@ string Usage()
             "                                         -i: specify the device serial number\n"
             "                                         -o: specify the listen address\n"
             " killall-sub                           - Kill all subserver processes\n"
+            " server loglevel [0-6]                 - Query or set the host server runtime log level\n"
 #endif
             "\n"
             "service commands(on daemon):\n"
@@ -172,8 +172,7 @@ string Verbose()
         " checkdevice key                       - Check given serial port is properly and whether\n"
         "                                         any devices are connected(only uart)\n"
         " any                                   - Try to connect the first ready device(only uart)\n"
-        "\n"
-        "---------------------------------component commands:-------------------------------\n"
+        "\n---------------------------------component commands:-------------------------------\n"
         "session commands(on server):\n"
         " discover                              - Discover devices listening on TCP via LAN broadcast\n"
         " list targets [-v]                     - List all devices status, -v for detail\n"
@@ -202,6 +201,7 @@ string Verbose()
         "                                         -o: specify the listen address\n"
         "                                         -N/-L: internal use only, do not specify\n"
         " killall-sub                           - Kill all subserver processes\n"
+        " server loglevel [0-6]                 - Query or set the host server runtime log level\n"
 #endif
         " -e ip                                 - Set the IP address for which the host listens during TCP\n"
         "                                         port forwarding. The default value is 127.0.0.1,\n"
@@ -506,6 +506,15 @@ string String2FormatCommand(const char *inputRaw, int sizeInputRaw, FormatComman
 #endif
     else if (!strncmp(input.c_str(), CMDSTR_CHECK_SERVER.c_str(), CMDSTR_CHECK_SERVER.size())) {
         outCmd->cmdFlag = CMD_CHECK_SERVER;
+    } else if (IsWholeCommandOrHasParameter(input, CMDSTR_SERVER_LOG_LEVEL)) {
+        size_t parameterBegin = CMDSTR_SERVER_LOG_LEVEL.size();
+        while (parameterBegin < input.size() && input[parameterBegin] == ' ') {
+            ++parameterBegin;
+        }
+        if (parameterBegin < input.size() && input[parameterBegin] != '\0') {
+            outCmd->parameters = input.c_str() + parameterBegin;
+        }
+        outCmd->cmdFlag = CMD_SERVER_LOG_LEVEL;
     } else if (!strncmp(input.c_str(), CMDSTR_CHECK_DEVICE.c_str(), CMDSTR_CHECK_DEVICE.size())) {
         outCmd->parameters = input.c_str() + CMDSTR_CHECK_DEVICE.size() + 1;  // with ' '
         outCmd->cmdFlag = CMD_CHECK_DEVICE;

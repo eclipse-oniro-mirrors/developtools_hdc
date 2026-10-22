@@ -42,47 +42,31 @@ int IsRegisterCommand(string &outCommand, const char *cmd, const char *cmdnext)
 {
     string sCmdNext = cmdnext == nullptr ? string("") : string(cmdnext);
     string doubleCommand = cmd + string(" ") + sCmdNext;
-    vector<string> registerCommand;
-    registerCommand.push_back(CMDSTR_SOFTWARE_VERSION);
-    registerCommand.push_back(CMDSTR_SOFTWARE_HELP);
-    registerCommand.push_back(CMDSTR_TARGET_DISCOVER);
-    registerCommand.push_back(CMDSTR_LIST_TARGETS);
-    registerCommand.push_back(CMDSTR_CHECK_SERVER);
-    registerCommand.push_back(CMDSTR_CHECK_DEVICE);
-    registerCommand.push_back(CMDSTR_WAIT_FOR);
-    registerCommand.push_back(CMDSTR_CONNECT_ANY);
-    registerCommand.push_back(CMDSTR_CONNECT_TARGET);
-    registerCommand.push_back(CMDSTR_TARGET_RECONNECT);
-    registerCommand.push_back(CMDSTR_SHELL);
-    registerCommand.push_back(CMDSTR_SHELL_EX);
-    registerCommand.push_back(CMDSTR_FILE_SEND);
-    registerCommand.push_back(CMDSTR_FILE_RECV);
-    registerCommand.push_back(CMDSTR_FORWARD_FPORT);
-    registerCommand.push_back(CMDSTR_FORWARD_RPORT);
-    registerCommand.push_back(CMDSTR_SERVICE_KILL);
-    registerCommand.push_back(CMDSTR_SERVICE_START);
-    registerCommand.push_back(CMDSTR_GENERATE_KEY);
-    registerCommand.push_back(CMDSTR_APP_INSTALL);
-    registerCommand.push_back(CMDSTR_APP_UNINSTALL);
-    registerCommand.push_back(CMDSTR_TARGET_MOUNT);
-    registerCommand.push_back(CMDSTR_HILOG);
-    registerCommand.push_back(CMDSTR_STARTUP_MODE);
-    registerCommand.push_back(CMDSTR_BUGREPORT);
-    registerCommand.push_back(CMDSTR_TARGET_MODE);
-    registerCommand.push_back(CMDSTR_APP_SIDELOAD);
-    registerCommand.push_back(CMDSTR_TARGET_REBOOT);
-    registerCommand.push_back(CMDSTR_LIST_JDWP);
-    registerCommand.push_back(CMDSTR_TRACK_JDWP);
-    registerCommand.push_back(CMDSTR_FLASHD_UPDATE);
-    registerCommand.push_back(CMDSTR_FLASHD_FLASH);
-    registerCommand.push_back(CMDSTR_FLASHD_ERASE);
-    registerCommand.push_back(CMDSTR_FLASHD_FORMAT);
+    static const vector<string> registerCommand = {
+        CMDSTR_SOFTWARE_VERSION, CMDSTR_SOFTWARE_HELP,
+        CMDSTR_TARGET_DISCOVER, CMDSTR_LIST_TARGETS,
+        CMDSTR_CHECK_SERVER, CMDSTR_CHECK_DEVICE,
+        CMDSTR_WAIT_FOR, CMDSTR_CONNECT_ANY,
+        CMDSTR_CONNECT_TARGET, CMDSTR_TARGET_RECONNECT,
+        CMDSTR_SHELL, CMDSTR_SHELL_EX,
+        CMDSTR_FILE_SEND, CMDSTR_FILE_RECV,
+        CMDSTR_FORWARD_FPORT, CMDSTR_FORWARD_RPORT,
+        CMDSTR_SERVICE_KILL, CMDSTR_SERVICE_START,
+        CMDSTR_SERVER_LOG_LEVEL, CMDSTR_GENERATE_KEY,
+        CMDSTR_APP_INSTALL, CMDSTR_APP_UNINSTALL,
+        CMDSTR_TARGET_MOUNT, CMDSTR_HILOG,
+        CMDSTR_STARTUP_MODE, CMDSTR_BUGREPORT,
+        CMDSTR_TARGET_MODE, CMDSTR_APP_SIDELOAD,
+        CMDSTR_TARGET_REBOOT, CMDSTR_LIST_JDWP,
+        CMDSTR_TRACK_JDWP, CMDSTR_FLASHD_UPDATE,
+        CMDSTR_FLASHD_FLASH, CMDSTR_FLASHD_ERASE,
+        CMDSTR_FLASHD_FORMAT,
 #ifndef HOST_OHOS
-    registerCommand.push_back(CMDSTR_SPAWN_SUB);
-    registerCommand.push_back(CMDSTR_KILLALL_SUB);
+        CMDSTR_SPAWN_SUB, CMDSTR_KILLALL_SUB,
 #endif
+    };
 
-    for (string v : registerCommand) {
+    for (const string &v : registerCommand) {
         if (doubleCommand == v) {
             outCommand = doubleCommand;
             return CMD_ARG1_COUNT;
@@ -169,9 +153,8 @@ int RunServerMode()
      * RemoveLogFile will create thread to run ThreadCompressLog and RemoveOlderLogFiles which will
      * call uv_os_tmpdir and libuv inner wiil call getenv
      * setenv and getenv concurrent calling wiil cause crash
-     * NOW, for hdc server setenv are SetLibusbLogLevelEnv and HdcServer construct
+     * NOW, for hdc server setenv is in HdcServer construct
     */
-    HdcHostUSB::SetLibusbLogLevelEnv(HdcHostUSB::GetLibusbLogLevel());
     HdcServer server(true);
     if (!server.Initial(serverListenString.c_str())) {
         Base::PrintMessage("Initial failed");

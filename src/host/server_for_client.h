@@ -58,6 +58,7 @@ private:
     bool CommandRemoveSession(HChannel hChannel, const char *connectKey);
     bool CommandReconnectTarget(HChannel hChannel, const char *connectKey);
     bool RemoveFportkey(const string &forwardKey);
+    bool DoServerLogLevel(HChannel hChannel, const string &parameters);
     bool DoCommandLocal(HChannel hChannel, void *formatCommandInput);
     bool DoCommandRemote(HChannel hChannel, void *formatCommandInput);
     void GetTargetList(HChannel hChannel, void *formatCommandInput);

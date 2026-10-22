@@ -175,6 +175,7 @@ const string CMDSTR_SOFTWARE_HELP = "help";
 const string CMDSTR_TARGET_DISCOVER = "discover";
 const string CMDSTR_SERVICE_START = "start";
 const string CMDSTR_SERVICE_KILL = "kill";
+const string CMDSTR_SERVER_LOG_LEVEL = "server loglevel";
 const string CMDSTR_GENERATE_KEY = "keygen";
 const string CMDSTR_LIST_TARGETS = "list targets";
 const string CMDSTR_CHECK_SERVER = "checkserver";

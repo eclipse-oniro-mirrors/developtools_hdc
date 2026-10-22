@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 #include "host_translate_test.h"
+#include "host_usb.h"
 #include "translate.h"
 
 using namespace testing::ext;
@@ -303,6 +304,117 @@ HWTEST_F(HdcTranslateTest, TestString2FormatCommandUnkown, TestSize.Level0)
 
     EXPECT_EQ(formatCommand->cmdFlag, 0);
     EXPECT_EQ(result, "Unknown command...\n");
+}
+
+HWTEST_F(HdcTranslateTest, TestServerCheckServerCommand, TestSize.Level0)
+{
+    const std::string input = "checkserver";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_CHECK_SERVER);
+    EXPECT_EQ(formatCommand->parameters, "");
+}
+
+HWTEST_F(HdcTranslateTest, TestServerLogLevelQueryCommand, TestSize.Level0)
+{
+    const std::string input = "server loglevel";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+ 
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->parameters, "");
+}
+ 
+HWTEST_F(HdcTranslateTest, TestServerLogLevelSetCommand, TestSize.Level0)
+{
+    for (uint8_t level = LOG_OFF; level <= LOG_LAST; ++level) {
+        formatCommand->cmdFlag = 0;
+        formatCommand->parameters.clear();
+        std::string input = "server loglevel " + std::to_string(level);
+        string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+ 
+        EXPECT_EQ(result, "");
+        EXPECT_FALSE(formatCommand->bJumpDo);
+        EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+        EXPECT_EQ(formatCommand->parameters, std::to_string(level));
+    }
+}
+ 
+HWTEST_F(HdcTranslateTest, TestServerLogLevelMultipleSpaces, TestSize.Level0)
+{
+    // Multiple spaces between command word and parameter must be skipped.
+    const std::string input = "server loglevel   5";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->parameters, "5");
+}
+
+HWTEST_F(HdcTranslateTest, TestServerLogLevelTrailingSpace, TestSize.Level0)
+{
+    // Trailing space after command word is treated as no-parameter query.
+    const std::string input = "server loglevel ";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->parameters, "");
+}
+
+HWTEST_F(HdcTranslateTest, TestServerLogLevelPrefixBoundary, TestSize.Level0)
+{
+    // "server loglevelX" is a prefix collision: IsWholeCommandOrHasParameter must reject it
+    // (next char after the command word is neither space nor '\0').
+    const std::string input = "server loglevelX";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+
+    EXPECT_NE(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->cmdFlag, 0);
+    EXPECT_EQ(result, "Unknown command...\n");
+}
+
+HWTEST_F(HdcTranslateTest, TestServerLogLevelPreservesInvalidParameter, TestSize.Level0)
+{
+    const std::string input = "server loglevel 3 extra";
+    string result = TranslateCommand::String2FormatCommand(input.c_str(), input.size(), formatCommand);
+ 
+    EXPECT_EQ(result, "");
+    EXPECT_FALSE(formatCommand->bJumpDo);
+    EXPECT_EQ(formatCommand->cmdFlag, CMD_SERVER_LOG_LEVEL);
+    EXPECT_EQ(formatCommand->parameters, "3 extra");
+}
+ 
+HWTEST_F(HdcTranslateTest, TestServerLogLevelHelp, TestSize.Level0)
+{
+#ifndef __OHOS__
+    // "server loglevel [0-6]" help text only exists on non-OHOS platforms (see Usage/Verbose).
+    EXPECT_NE(TranslateCommand::Usage().find("server loglevel [0-6]"), string::npos);
+    EXPECT_NE(TranslateCommand::Verbose().find("server loglevel [0-6]"), string::npos);
+#endif
+    EXPECT_NE(TranslateCommand::Usage().find("-l[0-6]"), string::npos);
+}
+ 
+HWTEST_F(HdcTranslateTest, TestLibusbLogLevelMapping, TestSize.Level0)
+{
+    const std::vector<libusb_log_level> expected = {
+        LIBUSB_LOG_LEVEL_NONE,
+        LIBUSB_LOG_LEVEL_ERROR,
+        LIBUSB_LOG_LEVEL_WARNING,
+        LIBUSB_LOG_LEVEL_INFO,
+        LIBUSB_LOG_LEVEL_DEBUG,
+        LIBUSB_LOG_LEVEL_DEBUG,
+        LIBUSB_LOG_LEVEL_DEBUG,
+    };
+ 
+    for (uint8_t level = LOG_OFF; level <= LOG_LAST; ++level) {
+        EXPECT_EQ(HdcHostUSB::GetLibusbLogLevel(level), expected[level]);
+    }
 }
 
 HWTEST_F(HdcTranslateTest, TestString2FormatCommandFportLs, TestSize.Level0)

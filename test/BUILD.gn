@@ -13,7 +13,7 @@
 import("//build/test.gni")
 import("//developtools/hdc/hdc.gni")
 hdc_path = "//developtools/hdc/"
-module_output_path = "developtools/hdc/"
+module_output_path = "hdc/hdc"
 declare_args() {
   hdc_unit_test = true
   hdc_fuzz_test = true
@@ -388,6 +388,7 @@ ohos_unittest("hdc_host_base_unittest") {
     "unittest/host/host_app_test.cpp",
     "unittest/host/host_uds_server_test.cpp",
     "unittest/host/host_fport_listen_ip_test.cpp",
+    "unittest/host/host_channel_payload_test.cpp",
     "unittest/host/host_receive_permit_test.cpp",
     "unittest/host/host_remove_forward_test.cpp",
     "unittest/host/host_shell_option_test.cpp",
@@ -848,6 +849,7 @@ ohos_unittest("hdc_ext_unittest") {
     "${hdc_path}/src/common/heartbeat.cpp",
     "${hdc_path}/src/common/server_cmd_log.cpp",
     "${hdc_path}/src/common/auth.cpp",
+    "${hdc_path}/src/common/credential_message.cpp",
     "${hdc_path}/src/common/entry.cpp",
     "unittest/ext/ext_test.cpp",
   ]

@@ -356,6 +356,7 @@ string HdcClient::AutoConnectKey(string &doCommand, const string &preConnectKey)
     vecNoConnectKeyCommand.push_back(CMDSTR_KILLALL_SUB);
     vecNoConnectKeyCommand.push_back(CMDSTR_LIST_TARGETS);
     vecNoConnectKeyCommand.push_back(CMDSTR_CHECK_SERVER);
+    vecNoConnectKeyCommand.push_back(CMDSTR_SERVER_LOG_LEVEL);
     vecNoConnectKeyCommand.push_back(CMDSTR_CONNECT_TARGET);
     vecNoConnectKeyCommand.push_back(CMDSTR_TARGET_RECONNECT);
     vecNoConnectKeyCommand.push_back(CMDSTR_CHECK_DEVICE);

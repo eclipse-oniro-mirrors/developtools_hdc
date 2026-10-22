@@ -48,8 +48,23 @@ namespace Base {
     const std::string CALLER_SERVER = "server";
     const std::string CALLER_DAEMON = "daemon";
     uint8_t GetLogLevel();
+    inline bool ParseLogLevel(const std::string &input, uint8_t &logLevel)
+    {
+        if (input.size() != 1 || input[0] < '0' || input[0] > '0' + LOG_LAST) {
+            return false;
+        }
+        logLevel = static_cast<uint8_t>(input[0] - '0');
+        return true;
+    }
+    inline const char *GetLogLevelName(uint8_t logLevel)
+    {
+        static constexpr const char *logLevelNames[] = {
+            "off", "fatal", "warn", "info", "debug", "all", "verbose"
+        };
+        return logLevel <= LOG_LAST ? logLevelNames[logLevel] : "unknown";
+    }
     extern bool g_isBackgroundServer;
-    extern uint8_t g_logLevel;
+    extern std::atomic<uint8_t> g_logLevel;
 #ifdef HDC_UNIT_TEST
     extern bool g_encryptTCPSwitch;
     extern bool g_heartbeatSwitch;

@@ -36,6 +36,7 @@ static const int ENTERPRISE_HDC_DISABLE_ERR = -11;
 #endif
 
 namespace {
+
 string GetDaemonConnectionError(HDaemonInfo hdi)
 {
     const char *transportError = hdi == nullptr ? nullptr : GetConnectionErrorInfo(hdi->connType);
@@ -868,6 +869,38 @@ bool HdcServerForClient::RemoveForward(HChannel hChannel, const char *parameterS
     return ret;
 }
 
+bool HdcServerForClient::DoServerLogLevel(HChannel hChannel, const string &parameters)
+{
+    uint8_t oldLevel = Base::GetLogLevel();
+    if (parameters.empty()) {
+        EchoClient(hChannel, MSG_OK, "Current server log level: %u (%s)", oldLevel,
+            Base::GetLogLevelName(oldLevel));
+        hChannel->isSuccess = true;
+        return false;
+    }
+ 
+    uint8_t newLevel = oldLevel;
+    if (!Base::ParseLogLevel(parameters, newLevel)) {
+        EchoClient(hChannel, MSG_FAIL, "Usage: server loglevel [0-6]");
+        hChannel->isSuccess = false;
+        return false;
+    }
+ 
+    Base::SetLogLevel(newLevel);
+    HdcServer *ptrServer = static_cast<HdcServer *>(clsServer);
+    HdcHostUSB *usbClt = ptrServer->clsUSBClt;
+    if (usbClt != nullptr) {
+        int usbResult = usbClt->SetLibusbLogLevel();
+        if (usbResult != LIBUSB_SUCCESS) {
+            WRITE_LOG(LOG_WARN, "Set libusb log level failed:%d", usbResult);
+        }
+    }
+    EchoClient(hChannel, MSG_OK, "Server log level changed: %u (%s) -> %u (%s)", oldLevel,
+        Base::GetLogLevelName(oldLevel), newLevel, Base::GetLogLevelName(newLevel));
+    hChannel->isSuccess = true;
+    return false;
+}
+
 bool HdcServerForClient::DoCommandLocal(HChannel hChannel, void *formatCommandInput)
 {
     StartTraceScope("HdcServerForClient::DoCommandLocal");
@@ -908,6 +941,10 @@ bool HdcServerForClient::DoCommandLocal(HChannel hChannel, void *formatCommandIn
             ReportServerVersion(hChannel);
             hChannel->isSuccess = true;
             ret = false;
+            break;
+        }
+        case CMD_SERVER_LOG_LEVEL: {
+            ret = DoServerLogLevel(hChannel, formatCommand->parameters);
             break;
         }
         case CMD_WAIT_FOR: {
@@ -1333,7 +1370,8 @@ bool HdcServerForClient::DoCommand(HChannel hChannel, void *formatCommandInput, 
         formatCommand->cmdFlag == CMD_SERVER_KILL ||
 #endif
         formatCommand->cmdFlag == CMD_SPAWN_SUB ||
-        formatCommand->cmdFlag == CMD_SERVICE_START) {
+        formatCommand->cmdFlag == CMD_SERVICE_START ||
+        formatCommand->cmdFlag == CMD_SERVER_LOG_LEVEL) {
         hChannel->commandFlag = formatCommand->cmdFlag;
         hChannel->commandParameters = formatCommand->parameters;
         // Main thread command, direct Listen main thread
