@@ -1257,10 +1257,6 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
         return remoteRet;
     }
     uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
-    int remoteRet = TrySendRemotePassthrough(hChannel, bufPtr, bytesIO);
-    if (remoteRet != 0) {
-        return remoteRet;
-    }
     struct TranslateCommand::FormatCommand formatCommand = {};
     if (!hChannel->interactiveShellMode) {
         string retEcho = String2FormatCommand(reinterpret_cast<char *>(bufPtr), bytesIO, &formatCommand);
