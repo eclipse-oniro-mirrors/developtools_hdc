@@ -970,6 +970,10 @@ int HdcSessionBase::Send(const uint32_t sessionId, const uint32_t channelId, con
                          const uint8_t *data, const int dataSize)
 {
     StartTraceScope("HdcSessionBase::Send");
+    if (dataSize < 0) {
+        WRITE_LOG(LOG_WARN, "Send invalid dataSize:%d cid:%u flag:%u", dataSize, channelId, commandFlag);
+        return ERR_GENERIC;
+    }
     HSession hSession = AdminSession(OP_QUERY_REF, sessionId, nullptr);
     if (!hSession) {
         WRITE_LOG(LOG_WARN, "Send to offline device, drop it, sessionId:%s",

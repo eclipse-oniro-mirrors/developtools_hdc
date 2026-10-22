@@ -359,6 +359,10 @@ void HdcServerForClient::SendCommandToClient(const HChannel hChannel, const uint
 bool HdcServerForClient::SendToDaemon(HChannel hChannel, const uint16_t commandFlag, uint8_t *bufPtr, const int bufSize)
 {
     StartTraceScope("HdcServerForClient::SendToDaemon");
+    if (bufSize < 0) {
+        WRITE_LOG(LOG_WARN, "SendToDaemon invalid bufSize:%d cid:%u", bufSize, hChannel->channelId);
+        return false;
+    }
     HDaemonInfo hdi = nullptr;
     bool ret = false;
     HdcServer *ptrServer = (HdcServer *)clsServer;
@@ -1218,6 +1222,14 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
     if (hdi && !hdi->emgmsg.empty()) {
         EchoClient(hChannel, MSG_FAIL, hdi->emgmsg.c_str());
         return ERR_GENERIC;
+    }
+    // Remote passthrough frames carry a 2-byte command field ahead of the payload.
+    // Reject short frames before reading the command, otherwise bytesIO - sizeof(uint16_t)
+    // wraps to a huge size_t and overflows the heap buffer in HdcSessionBase::Send.
+    if (hChannel->remote > RemoteType::REMOTE_NONE && bytesIO < static_cast<int>(sizeof(uint16_t))) {
+        WRITE_LOG(LOG_WARN, "ReadChannel remote payload too short bytesIO:%d cid:%u", bytesIO,
+            hChannel->channelId);
+        return -3;  // -3: error or want close
     }
     uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
     if (command != 0 && (hChannel->remote > RemoteType::REMOTE_NONE)) {
