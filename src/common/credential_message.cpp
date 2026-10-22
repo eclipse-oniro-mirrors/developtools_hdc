@@ -346,9 +346,21 @@ bool SendMessageByUnixSocket(const int sockfd, const std::string &messageStr)
         return false;
     }
 
-    if (send(sockfd, messageStr.c_str(), messageStr.size(), 0) < 0) {
-        WRITE_LOG(LOG_FATAL, "Failed to send message.");
-        return false;
+    size_t sent = 0;
+    size_t total = messageStr.size();
+    while (sent < total) {
+        int rc = send(sockfd, messageStr.c_str() + sent, total - sent, 0);
+        if (rc < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            WRITE_LOG(LOG_FATAL, "send error:%d", errno);
+            return false;
+        } else if (rc == 0) {
+            WRITE_LOG(LOG_FATAL, "connection closed by peer");
+            return false;
+        }
+        sent += rc;
     }
 
     return true;

@@ -128,7 +128,6 @@ protected:
     static void OnFileOpenFailed(CtxFile *context);
     static void OnFileClose(CtxFile *context);
     bool CheckSandboxOptionCompatibility(const string &option, CtxFile *context);
-    int GetSubFiles(const char *path, string filter, vector<string> *out);
     int GetSubFilesRecursively(string path, string currentDirname, vector<string> *out);
     virtual void CheckMaster(CtxFile* /* context */)
     {

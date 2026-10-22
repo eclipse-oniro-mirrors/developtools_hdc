@@ -596,7 +596,7 @@ int HdcClient::Initial(const string &connectKeyIn)
 {
     connectKey = connectKeyIn;
 #ifdef __OHOS__
-    if (channel->isUds) {
+    if (channel != nullptr && channel->isUds) {
         return 0;
     }
 #endif

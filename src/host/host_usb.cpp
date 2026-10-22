@@ -55,6 +55,7 @@ int HdcHostUSB::Initial()
 {
     if (!ctxUSB) {
         WRITE_LOG(LOG_FATAL, "USB mod ctxUSB is nullptr, recompile please");
+        return ERR_GENERIC;
     }
     WRITE_LOG(LOG_DEBUG, "HdcHostUSB init");
     modRunning = true;

@@ -544,7 +544,18 @@ void HdcTransferBase::OnFileOpen(uv_fs_t *req)
     if (context->master) { // master just read, and slave just write.
         // init master
         uv_fs_t fs = {};
-        uv_fs_fstat(nullptr, &fs, context->openFd, nullptr);
+        int rc = uv_fs_fstat(nullptr, &fs, context->openFd, nullptr);
+        if (rc < 0) {
+            uv_fs_req_cleanup(&fs);
+            char buffer[BUF_SIZE_DEFAULT] = { 0 };
+            uv_strerror_r(rc, buffer, BUF_SIZE_DEFAULT);
+            std::string path = context->localPath;
+            thisClass->LogMsg(MSG_FAIL, "stat path:%s error:%s", path.c_str(), buffer);
+            WRITE_LOG(LOG_FATAL, "stat path:%s error:%s",
+                (Base::GetCaller() != Base::Caller::CLIENT ? Hdc::MaskString(path) : path).c_str(), buffer);
+            OnFileOpenFailed(context);
+            return;
+        }
         WRITE_LOG(LOG_DEBUG, "uv_fs_fstat result:%d fileSize:%llu",
             context->openFd, fs.statbuf.st_size);
         TransferConfig &st = context->transferConfig;
@@ -612,48 +623,6 @@ bool HdcTransferBase::MatchPackageExtendName(string fileName, string extName)
     match = true;
     return match;
 }
-
-// filter can be empty
-int HdcTransferBase::GetSubFiles(const char *path, string filter, vector<string> *out)
-{
-    int retNum = 0;
-    uv_fs_t req = {};
-    uv_dirent_t dent;
-    vector<string> filterStrings;
-    if (!strlen(path)) {
-        return retNum;
-    }
-    if (filter.size()) {
-        Base::SplitString(filter, ";", filterStrings);
-    }
-
-    if (uv_fs_scandir(nullptr, &req, path, 0, nullptr) < 0) {
-        uv_fs_req_cleanup(&req);
-        return retNum;
-    }
-    while (uv_fs_scandir_next(&req, &dent) != UV_EOF) {
-        // Skip. File
-        if (strcmp(dent.name, ".") == 0 || strcmp(dent.name, "..") == 0) {
-            continue;
-        }
-        if (!(static_cast<uint32_t>(dent.type) & UV_DIRENT_FILE)) {
-            continue;
-        }
-        string fileName = dent.name;
-        for (auto &&s : filterStrings) {
-            size_t subfixIndex = fileName.rfind(s);
-            if ((fileName.size() - subfixIndex) != s.size())
-                continue;
-            string fullPath = string(path) + Base::GetPathSep();
-            fullPath += fileName;
-            out->push_back(fullPath);
-            ++retNum;
-        }
-    }
-    uv_fs_req_cleanup(&req);
-    return retNum;
-}
-
 
 int HdcTransferBase::GetSubFilesRecursively(string path, string currentDirname, vector<string> *out)
 {

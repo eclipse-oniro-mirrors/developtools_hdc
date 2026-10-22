@@ -159,7 +159,7 @@ bool TlvBuf::ContainInvalidTag(void) const
 
     for (auto it = this->mTlvMap.begin(); it != this->mTlvMap.end(); ++it) {
         if (this->mValidTags.count(it->first) == 0) {
-            WRITE_LOG(LOG_WARN, "contain invalid tag %u len %u", it->first, it->second.size());
+            WRITE_LOG(LOG_WARN, "contain invalid tag %u len %zu", it->first, it->second.size());
             return true;
         }
     }
