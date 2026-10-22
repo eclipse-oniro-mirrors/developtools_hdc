@@ -1249,14 +1249,11 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
         EchoClient(hChannel, MSG_FAIL, hdi->emgmsg.c_str());
         return ERR_GENERIC;
     }
-    // Remote passthrough frames carry a 2-byte command field ahead of the payload.
-    // Reject short frames before reading the command, otherwise bytesIO - sizeof(uint16_t)
-    // wraps to a huge size_t and overflows the heap buffer in HdcSessionBase::Send.
+    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
     int remoteRet = TrySendRemotePassthrough(hChannel, bufPtr, bytesIO);
     if (remoteRet != 0) {
         return remoteRet;
     }
-    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
     struct TranslateCommand::FormatCommand formatCommand = {};
     if (!hChannel->interactiveShellMode) {
         string retEcho = String2FormatCommand(reinterpret_cast<char *>(bufPtr), bytesIO, &formatCommand);
