@@ -1078,7 +1078,8 @@ static void EchoLog(string &buf)
         } else if (type == UV_NAMED_PIPE) {
             name = "named_pipe";
         } else {
-            WRITE_LOG(LOG_DEBUG, "%s, the uv handle type is %d", prefix, type);
+            // Not a stream (idle/timer/async/...): no write queue to report, and a bare type
+            // number identifies nothing. This fired on every non-stream handle teardown.
             return;
         }
 
