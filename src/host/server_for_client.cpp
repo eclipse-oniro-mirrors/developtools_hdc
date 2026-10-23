@@ -1196,30 +1196,23 @@ static bool ReportCommandEvent(uint8_t *bufPtr, const int bytesIO, bool isInterc
 }
 #endif
 
-// Remote passthrough frames carry a 2-byte command field ahead of the payload.
-// Reject short frames before reading the command, otherwise bytesIO - sizeof(uint16_t)
-// wraps to a huge size_t and overflows the heap buffer in HdcSessionBase::Send.
-// Returns >0 when the frame was a remote passthrough command and has been handled,
-// <0 when the short frame should close the channel, 0 when not a remote frame.
-int HdcServerForClient::TrySendRemotePassthrough(HChannel hChannel, uint8_t *bufPtr, const int bytesIO)
+// server directly passthrough file command to daemon
+bool HdcServerForClient::TrySendRemotePassthrough(HChannel hChannel, uint8_t *bufPtr, const int bytesIO)
 {
-    if (hChannel->remote <= RemoteType::REMOTE_NONE) {
-        return 0;
+    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
+    if (command != 0 && (hChannel->remote > RemoteType::REMOTE_NONE)) {
+        // server directly passthrough file command to daemon
+        if (!SendToDaemon(hChannel, command, bufPtr + sizeof(uint16_t), bytesIO - sizeof(uint16_t))) {
+            WRITE_LOG(LOG_FATAL, "Client ReadChannel : direct send to daemon failed");
+        }
+        return true;
     }
     if (bytesIO < static_cast<int>(sizeof(uint16_t))) {
         WRITE_LOG(LOG_WARN, "ReadChannel remote payload too short bytesIO:%d cid:%u", bytesIO,
             hChannel->channelId);
-        return -3;  // -3: error or want close
+        return false;
     }
-    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
-    if (command == 0) {
-        return 0;
-    }
-    // server directly passthrough file command to daemon
-    if (!SendToDaemon(hChannel, command, bufPtr + sizeof(uint16_t), bytesIO - sizeof(uint16_t))) {
-        WRITE_LOG(LOG_FATAL, "Client ReadChannel : direct send to daemon failed");
-    }
-    return 1;
+    return false;
 }
 
 // Here is Server to get data, the source is the SERVER's ChildWork to send data
@@ -1250,9 +1243,8 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
         return ERR_GENERIC;
     }
     uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
-    int remoteRet = TrySendRemotePassthrough(hChannel, bufPtr, bytesIO);
-    if (remoteRet != 0) {
-        return remoteRet;
+    if (TrySendRemotePassthrough(hChannel, bufPtr, bytesIO)) {
+        return 0;
     }
     struct TranslateCommand::FormatCommand formatCommand = {};
     if (!hChannel->interactiveShellMode) {
