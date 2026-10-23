@@ -61,10 +61,6 @@ bool HdcDaemonApp::MakeCtxForAppCheck(uint8_t *payload, const int payloadSize)
         WRITE_LOG(LOG_FATAL, "CMD_APP_CHECK ParseFromString failed");
         return false;
     }
-    if (!Base::CheckPathTraversal(ctxNow.transferConfig.optionalName)) {
-        WRITE_LOG(LOG_FATAL, "CMD_APP_CHECK rejected unsafe optionalName");
-        return false;
-    }
     // update transferconfig to main context
     ctxNow.master = false;
     string dstPath = "/data/local/tmp/";
