@@ -830,10 +830,6 @@ bool HdcServer::FetchCommand(HSession hSession, const uint32_t channelId, const 
         --hChannel->ref;
         return ret;
     }
-    if (!CheckHostCommandPermission(hChannel, hSession->sessionId, command, payload, payloadSize)) {
-        --hChannel->ref;
-        return true;
-    }
     ret = DispatchChannelCommand(hChannel, hSession, command, payload, payloadSize);
     --hChannel->ref;
     return ret;
