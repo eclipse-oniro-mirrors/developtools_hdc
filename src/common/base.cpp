@@ -1792,7 +1792,7 @@ static void EchoLog(string &buf)
         if (stat(shellPath.c_str(), &filecheck) < 0) {
             shellPath = "/system/bin/sh";
             if (stat(shellPath.c_str(), &filecheck) < 0) {
-                shellPath = "sh";
+                shellPath = "";
             }
         }
         return shellPath;
@@ -3462,7 +3462,7 @@ void CloseOpenFd(void)
                             MAX_COMPRESS_LOG_FILE_COUNT);
     }
 
-    void SaveLogToPath(const std::string& path, const std::string& str)
+    bool SaveLogToPath(const std::string& path, const std::string& str)
     {
         int flags = UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_NOFOLLOW; // add O_NOFOLLOW
         uv_fs_t req;
@@ -3481,13 +3481,18 @@ void CloseOpenFd(void)
             } else {
                 WRITE_LOG(LOG_FATAL, "SaveLogToPath failed, path:%s error:%s", path.c_str(), buffer);
             }
-            return;
+            return false;
         }
         string text(str);
         uv_buf_t wbf = uv_buf_init((char *)str.c_str(), text.size());
         uv_fs_req_cleanup(&req);
-        uv_fs_write(nullptr, &req, fd, &wbf, 1, -1, nullptr);
+        bool writeSuccess = uv_fs_write(nullptr, &req, fd, &wbf, 1, -1, nullptr) >= 0;
+        if (!writeSuccess) {
+            WRITE_LOG(LOG_FATAL, "save log failed path:%s", path.c_str());
+        }
         uv_fs_close(nullptr, &req, fd, nullptr);
+        uv_fs_req_cleanup(&req);
+        return writeSuccess;
     }
 
     bool EnsureDirectoryExists(const std::string& directoryPath)
@@ -3543,7 +3548,9 @@ void CloseOpenFd(void)
             loopCount++;
             cmdLog = Hdc::ServerCmdLog::GetInstance().PopCmdLogStr();
             if (!cmdLog.empty()) {
-                SaveLogToPath(cmdLogFileName, cmdLog);
+                if (!SaveLogToPath(cmdLogFileName, cmdLog)) {
+                    break;
+                }
             }
         }
         return true;

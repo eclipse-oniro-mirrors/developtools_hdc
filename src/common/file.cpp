@@ -61,7 +61,7 @@ bool HdcFile::BeginTransfer(CtxFile *context, const string &command)
         delete[](reinterpret_cast<char *>(argv));
         return false;
     }
-    uv_fs_t *openReq = new uv_fs_t;
+    uv_fs_t *openReq = new(std::nothrow) uv_fs_t;
     if (openReq == nullptr) {
         delete[](reinterpret_cast<char *>(argv));
         LogMsg(MSG_FAIL, "HdcFile::BeginTransfer new openReq failed");

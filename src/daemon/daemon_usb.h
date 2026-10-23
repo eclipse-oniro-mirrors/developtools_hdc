@@ -60,7 +60,7 @@ private:
 
     HdcUSB usbHandle = {};
     string basePath;                // usb device's base path
-    uint32_t currentSessionId = 0;  // USB mode,limit only one session
+    std::atomic<uint32_t> currentSessionId = 0;  // USB mode,limit only one session
     uv_timer_t checkEP;             // server-use
     mutex mutexUsbFfs;
     bool isAlive = false;

@@ -71,7 +71,11 @@ std::string CommandEventReport::FormatMessage(const std::string &command, const 
     std::string result = ss.str();
     if (result.length() + content.length() >= MESSAGE_STR_MAX_LEN - MESSAGE_BODY_POS) {
         int maxContentSize = MESSAGE_STR_MAX_LEN - MESSAGE_BODY_POS - result.length();
-        result.append(content.substr(content.length() - maxContentSize));
+        if (maxContentSize > 0 && static_cast<size_t>(maxContentSize) < content.length()) {
+            result.append(content.substr(content.length() - maxContentSize));
+        } else {
+            WRITE_LOG(LOG_FATAL, "max content size %d over %zu", maxContentSize, content.length());
+        }
     } else {
         result.append(content);
     }

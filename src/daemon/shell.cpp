@@ -259,25 +259,33 @@ static void SetSelinuxLabel()
 #if defined(SURPPORT_SELINUX)
     char *con = nullptr;
     if (getcon(&con) != 0) {
+        WRITE_LOG(LOG_FATAL, "getcon error:%d", errno);
         return;
     }
     if ((con != nullptr) && (strcmp(con, "u:r:hdcd:s0") != 0) && (strcmp(con, "u:r:updater:s0") != 0)) {
+        WRITE_LOG(LOG_FATAL, "strcmp con:%s", con);
         freecon(con);
         return;
     }
     string debugMode = "";
     SystemDepend::GetDevItem("const.debuggable", debugMode);
     if (debugMode != "1") {
-        setcon("u:r:sh:s0");
+        if (setcon("u:r:sh:s0") != 0) {
+            WRITE_LOG(LOG_FATAL, "debuggable setcon u:r:sh:s0 failed %d", errno);
+        }
     } else {
         string rootMode = "";
         string flashdMode = "";
         SystemDepend::GetDevItem("persist.hdc.root", rootMode);
         SystemDepend::GetDevItem("updater.flashd.configfs", flashdMode);
         if ((debugMode == "1" && rootMode == "1") || (debugMode == "1" && flashdMode == "1")) {
-            setcon("u:r:su:s0");
+            if (setcon("u:r:su:s0") != 0) {
+                WRITE_LOG(LOG_FATAL, "setcon u:r:su:s0 failed %d", errno);
+            }
         } else {
-            setcon("u:r:sh:s0");
+            if (setcon("u:r:sh:s0") != 0) {
+                WRITE_LOG(LOG_FATAL, "setcon u:r:sh:s0 failed %d", errno);
+            }
         }
     }
     freecon(con);
@@ -445,7 +453,13 @@ int HdcShell::StartShell()
     int ret = 0;
     HdcShell::mutexPty.lock();
     do {
-        if ((fdPTY = CreateSubProcessPTY(Base::GetShellPath().c_str(), "-", 0, &pidShell)) < 0) {
+        std::string shellPath = Base::GetShellPath();
+        if (shellPath.empty()) {
+            WRITE_LOG(LOG_FATAL, "StartShell not found shell path");
+            ret = ERR_GENERIC;
+            break;
+        }
+        if ((fdPTY = CreateSubProcessPTY(shellPath.c_str(), "-", 0, &pidShell)) < 0) {
             ret = ERR_PROCESS_SUB_FAIL;
             break;
         }

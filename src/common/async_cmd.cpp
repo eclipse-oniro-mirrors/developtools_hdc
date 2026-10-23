@@ -226,6 +226,10 @@ void AsyncCmd::ChildProcessExecute(const string &command, const string &optionPa
 #ifndef _WIN32
 
     string shellPath = Base::GetShellPath();
+    if (shellPath.empty()) {
+        WRITE_LOG(LOG_FATAL, "not found shell path");
+        return;
+    }
     int execlRet = 0;
     if (!optionPath.empty() && chdir(optionPath.c_str()) != 0) {
         string cmdEcho = "echo \"[E003006] Internal error: AsyncCmd chdir failed:" + optionPath + "\"";

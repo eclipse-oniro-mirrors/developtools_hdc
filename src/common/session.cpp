@@ -231,8 +231,11 @@ void HdcSessionBase::ReMainLoopForInstanceClear()
         uv_close((uv_handle_t *)handle, Base::CloseIdleCallback);
         uv_stop(&thisClass->loopMain);
     };
-    Base::IdleUvTask(&loopMain, this, clearSessionsForFinish);
-    uv_run(&loopMain, UV_RUN_DEFAULT);
+    if (Base::IdleUvTask(&loopMain, this, clearSessionsForFinish)) {
+        uv_run(&loopMain, UV_RUN_DEFAULT);
+    } else {
+        WRITE_LOG(LOG_FATAL, "remain loop for install clear IdleUvTask failed");
+    }
 };
 
 #ifdef HDC_SUPPORT_UART
