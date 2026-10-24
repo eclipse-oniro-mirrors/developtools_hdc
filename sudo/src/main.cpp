@@ -33,10 +33,12 @@
 #include "aclmgr_system_api.h"
 #include "locale_config.h"
 #include "locale_matcher.h"
+#include "parameters.h"
 
 using namespace OHOS::UserIam;
 using namespace OHOS::AccountSA;
 using namespace OHOS::UserIam::UserAuth;
+using namespace OHOS::system;
 
 namespace {
 static const int SUDO_ARG_MAX_NUMS = 4096;
@@ -738,8 +740,18 @@ static bool Verify()
     return true;
 }
 
+static bool IsPcMode()
+{
+    return GetParameter("settings.sceneboard.ispcmode", "true") == "true";
+}
+
 int main(int argc, char* argv[])
 {
+    if (!IsPcMode()) {
+        WriteStdErr("sudo is only supported in PC mode.\n");
+        return 1;
+    }
+
     if (!UpdateEnvironmentPath()) {
         return 1;
     }
