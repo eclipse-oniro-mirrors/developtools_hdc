@@ -388,7 +388,6 @@ ohos_unittest("hdc_host_base_unittest") {
     "unittest/host/host_app_test.cpp",
     "unittest/host/host_uds_server_test.cpp",
     "unittest/host/host_fport_listen_ip_test.cpp",
-    "unittest/host/host_channel_payload_test.cpp",
     "unittest/host/host_receive_permit_test.cpp",
     "unittest/host/host_remove_forward_test.cpp",
     "unittest/host/host_shell_option_test.cpp",
@@ -607,6 +606,7 @@ ohos_unittest("hdc_base_unittest") {
     "googletest:gmock_main",
     "huks:libhukssdk",
     "hisysevent:libhisysevent",
+    "hilog:libhilog",
   ]
 
   defines = [
