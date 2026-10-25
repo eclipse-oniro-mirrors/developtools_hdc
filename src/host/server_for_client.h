@@ -46,6 +46,7 @@ private:
     bool SetTCPListen();
     bool TryBindIPv4Fallback(char *buffer);
     int ReadChannel(HChannel hChannel, uint8_t *bufPtr, const int bytesIO) override;
+    bool TrySendRemotePassthrough(HChannel hChannel, uint8_t *bufPtr, const int bytesIO);
     void ReportServerVersion(HChannel hChannel);
     bool DoCommand(HChannel hChannel, void *formatCommandInput, HDaemonInfo &hdi);
     void OrderFindTargets(HChannel hChannel);
