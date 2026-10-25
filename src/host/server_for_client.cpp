@@ -1199,12 +1199,12 @@ static bool ReportCommandEvent(uint8_t *bufPtr, const int bytesIO, bool isInterc
 // server directly passthrough file command to daemon
 bool HdcServerForClient::TrySendRemotePassthrough(HChannel hChannel, uint8_t *bufPtr, const int bytesIO)
 {
-    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
     if (bytesIO < static_cast<int>(sizeof(uint16_t))) {
         WRITE_LOG(LOG_WARN, "ReadChannel remote payload too short bytesIO:%d cid:%u", bytesIO,
             hChannel->channelId);
         return false;
     }
+    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
     if (command != 0 && (hChannel->remote > RemoteType::REMOTE_NONE)) {
         // server directly passthrough file command to daemon
         if (!SendToDaemon(hChannel, command, bufPtr + sizeof(uint16_t), bytesIO - sizeof(uint16_t))) {
