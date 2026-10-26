@@ -76,6 +76,16 @@ private:
     bool ServerSessionHandshake(HSession hSession, uint8_t *payload, int payloadSize);
     bool ServerSSLHandshake(HSession hSession, SessionHandShake &handshake);
     bool ServerSessionSSLInit(HSession hSession, SessionHandShake &handshake);
+    bool DispatchChannelCommand(HChannel hChannel, HSession hSession,
+        const uint16_t command, uint8_t *payload, const int32_t payloadSize);
+    void HandleKernelEcho(HChannel hChannel, HSession hSession, const uint32_t channelId,
+        uint8_t *payload, const int32_t payloadSize);
+    void HandleChannelClose(HSession hSession, const uint32_t channelId, uint8_t *payload,
+        const int32_t payloadSize);
+    void HandleForwardSuccess(HChannel hChannel, HSession hSession, const uint32_t channelId,
+        uint8_t *payload, const int32_t payloadSize);
+    bool DispatchPassthroughTask(HChannel hChannel, const uint32_t channelId,
+        const uint16_t command, uint8_t *payload, const int32_t payloadSize);
     void GetDaemonMapOnlyOne(HDaemonInfo &hDaemonInfoInOut);
     void TryStopInstance();
     static bool PullupServerWin32(const char *path, const char *listenString);
