@@ -3323,5 +3323,20 @@ void CloseOpenFd(void)
         return Caller::DAEMON;
 #endif
     }
+    bool CheckPathTraversal(const std::string &path)
+    {
+        std::string normalizedPath = path;
+        std::replace(normalizedPath.begin(), normalizedPath.end(), '/', GetPathSep());
+        std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', GetPathSep());
+        std::istringstream iss(normalizedPath);
+        std::string component;
+        while (std::getline(iss, component, GetPathSep())) {
+            if (component == "..") {
+                WRITE_LOG(LOG_WARN, "path traversal detected: %s", Hdc::MaskString(path).c_str());
+                return false;
+            }
+        }
+        return true;
+    }
 } // namespace Base
 } // namespace Hdc

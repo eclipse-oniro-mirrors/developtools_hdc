@@ -133,6 +133,7 @@ namespace Base {
     string Convert2HexStr(uint8_t arr[], int length);
     string CanonicalizeSpecPath(string &src);
     bool TryCreateDirectory(const string &path, string &err);
+    bool CheckPathTraversal(const std::string &path);
     // clang-format off
     const string StringFormat(const char * const formater, ...);
     const string StringFormat(const char * const formater, va_list &vaArgs);
