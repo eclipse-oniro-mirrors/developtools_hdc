@@ -1021,4 +1021,404 @@ HWTEST_F(HdcUARTBaseTest, HeadToDebugString, TestSize.Level1)
     EXPECT_THAT(debugData, HasSubstr("dataCheckSum"));
     EXPECT_THAT(debugData, HasSubstr("headCheckSum"));
 }
+
+// ResponseUartTrans：packageIndex=0 边界
+HWTEST_F(HdcUARTBaseTest, ResponseUartTrans_ZeroIndex, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans)
+        .WillRepeatedly([&](uint32_t sid, uint32_t idx, UartProtocolOption opt) {
+            return mockUARTBase.HdcUARTBase::ResponseUartTrans(sid, idx, opt);
+        });
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, sizeof(UartHead), false));
+    mockUARTBase.ResponseUartTrans(123, 0, PKG_OPTION_FREE);
+}
+
+// ====== Incremental UT cases (2026) ======
+
+// SendUARTRaw：null session + GetSession 返回 null → false
+HWTEST_F(HdcUARTBaseTest, SendUARTRaw_NullSessionGetSessionNull, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, GetSession).WillRepeatedly(Return(nullptr));
+    uint8_t buf[sizeof(UartHead)] = {0};
+    UartHead *head = reinterpret_cast<UartHead *>(buf);
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = SERVER_ID;
+    EXPECT_FALSE(mockUARTBase.SendUARTRaw(nullptr, buf, sizeof(UartHead)));
+}
+
+// SendUARTData：length=0 → 0 (空包发送一次)
+HWTEST_F(HdcUARTBaseTest, SendUARTData_ZeroLength, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, _, true)).Times(1);
+    uint8_t dummy = 0;
+    EXPECT_EQ(mockUARTBase.SendUARTData(server.get(), &dummy, 0), 0);
+}
+
+// SendUARTData：恰好一个 max payload → 返回 length
+HWTEST_F(HdcUARTBaseTest, SendUARTData_ExactMaxPayload, TestSize.Level1)
+{
+    const size_t maxPayload = MAX_UART_SIZE_IOBUF - sizeof(UartHead);
+    std::vector<uint8_t> data(maxPayload, 0xAB);
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, _, true)).Times(1);
+    EXPECT_EQ(mockUARTBase.SendUARTData(server.get(), data.data(), maxPayload),
+              static_cast<int>(maxPayload));
+}
+
+// SendUartSoftReset：sessionId=0 不崩溃
+HWTEST_F(HdcUARTBaseTest, SendUartSoftReset_ZeroSessionId, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, SendUartSoftReset)
+        .WillRepeatedly([&](HSession h, uint32_t sid) {
+            mockUARTBase.HdcUARTBase::SendUartSoftReset(h, sid);
+        });
+    EXPECT_CALL(mockUARTBase, SendUartSoftReset(nullptr, 0)).Times(1);
+    mockUARTBase.SendUartSoftReset(nullptr, 0);
+}
+
+// UartSendToHdcStream：size=0 → false
+HWTEST_F(HdcUARTBaseTest, UartSendToHdcStream_SizeZero, TestSize.Level1)
+{
+    uint8_t dummy = 0;
+    EXPECT_FALSE(mockUARTBase.UartSendToHdcStream(server.get(), &dummy, 0));
+}
+
+// UartSendToHdcStream：size 恰好 sizeof(UartHead) 且 dataSize=0 → true (调用 UartToHdcProtocol)
+HWTEST_F(HdcUARTBaseTest, UartSendToHdcStream_ExactHeadSize, TestSize.Level1)
+{
+    std::vector<uint8_t> data(sizeof(UartHead), 0);
+    UartHead *head = reinterpret_cast<UartHead *>(data.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = server->sessionId;
+    head->dataSize = 0;
+    EXPECT_CALL(mockUARTBase, UartToHdcProtocol(_, _, 0)).WillOnce(Return(0));
+    EXPECT_TRUE(mockUARTBase.UartSendToHdcStream(server.get(), data.data(), data.size()));
+}
+
+// UartSendToHdcStream：head->dataSize > size - sizeof(UartHead) → false
+HWTEST_F(HdcUARTBaseTest, UartSendToHdcStream_PayloadSizeMismatch, TestSize.Level1)
+{
+    std::vector<uint8_t> data(sizeof(UartHead) + 4, 0);
+    UartHead *head = reinterpret_cast<UartHead *>(data.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = server->sessionId;
+    head->dataSize = 100; // 大于实际 payload 4
+    EXPECT_FALSE(mockUARTBase.UartSendToHdcStream(server.get(), data.data(), data.size()));
+}
+
+// UartSendToHdcStream：daemon 侧同 session → 走 UartToHdcProtocol 成功
+HWTEST_F(HdcUARTBaseTest, UartSendToHdcStream_DaemonSameSession, TestSize.Level1)
+{
+    std::vector<uint8_t> data(sizeof(UartHead) + 4, 0);
+    UartHead *head = reinterpret_cast<UartHead *>(data.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = daemon->sessionId;
+    head->dataSize = 4;
+    EXPECT_CALL(mockUARTBase, SendUartSoftReset).Times(0);
+    EXPECT_CALL(mockUARTBase, UartToHdcProtocol).WillOnce(Return(4));
+    EXPECT_TRUE(mockUARTBase.UartSendToHdcStream(daemon.get(), data.data(), data.size()));
+    EXPECT_FALSE(daemon->hUART->resetIO);
+}
+
+// UartSendToHdcStream：daemon 侧 diff session → 不触发 soft reset，返回 true
+HWTEST_F(HdcUARTBaseTest, UartSendToHdcStream_DaemonDiffSession, TestSize.Level1)
+{
+    std::vector<uint8_t> data(sizeof(UartHead), 0);
+    UartHead *head = reinterpret_cast<UartHead *>(data.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = daemon->sessionId + 1; // 不同 session
+    head->dataSize = 0;
+    EXPECT_CALL(mockUARTBase, SendUartSoftReset).Times(0);
+    EXPECT_TRUE(mockUARTBase.UartSendToHdcStream(daemon.get(), data.data(), data.size()));
+    EXPECT_FALSE(daemon->hUART->resetIO);
+}
+
+// ReadDataFromUARTStream：nread < 0 → 直接返回
+HWTEST_F(HdcUARTBaseTest, ReadDataFromUARTStream_NegativeNread, TestSize.Level1)
+{
+    uv_stream_t uvStream;
+    HdcSession hdcSession;
+    HdcUART uart;
+    hdcSession.sessionId = 0x5678;
+    uart.streamSize = 100;
+    uint8_t ioBuf[16] = {0};
+    hdcSession.classInstance = &mockSessionBase;
+    hdcSession.classModule = &mockUARTBase;
+    hdcSession.ioBuf = ioBuf;
+    hdcSession.hUART = &uart;
+    uvStream.data = static_cast<void *>(&hdcSession);
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans).Times(0);
+    HdcUARTBase::ReadDataFromUARTStream(&uvStream, -1, nullptr);
+}
+
+// ReadDataFromUARTStream：nread == 0 → 直接返回
+HWTEST_F(HdcUARTBaseTest, ReadDataFromUARTStream_ZeroNread, TestSize.Level1)
+{
+    uv_stream_t uvStream;
+    HdcSession hdcSession;
+    HdcUART uart;
+    uart.streamSize = 100;
+    uint8_t ioBuf[16] = {0};
+    hdcSession.classInstance = &mockSessionBase;
+    hdcSession.classModule = &mockUARTBase;
+    hdcSession.ioBuf = ioBuf;
+    hdcSession.hUART = &uart;
+    uvStream.data = static_cast<void *>(&hdcSession);
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans).Times(0);
+    HdcUARTBase::ReadDataFromUARTStream(&uvStream, 0, nullptr);
+}
+
+// ReadDataFromUARTStream：nread > streamSize → 直接返回
+HWTEST_F(HdcUARTBaseTest, ReadDataFromUARTStream_NreadOverflow, TestSize.Level1)
+{
+    uv_stream_t uvStream;
+    HdcSession hdcSession;
+    HdcUART uart;
+    uart.streamSize = 4;
+    uint8_t ioBuf[16] = {0};
+    hdcSession.classInstance = &mockSessionBase;
+    hdcSession.classModule = &mockUARTBase;
+    hdcSession.ioBuf = ioBuf;
+    hdcSession.hUART = &uart;
+    uvStream.data = static_cast<void *>(&hdcSession);
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans).Times(0);
+    HdcUARTBase::ReadDataFromUARTStream(&uvStream, 100, nullptr);
+}
+
+// UartToHdcProtocol：dataSize=0 → 返回 0
+HWTEST_F(HdcUARTBaseTest, UartToHdcProtocol_ZeroDataSize, TestSize.Level1)
+{
+    uv_stream_t stream;
+    HdcSession session;
+    stream.data = &session;
+    int fds[2] = {-1, -1};
+    ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds), 0);
+    session.dataFd[STREAM_MAIN] = fds[0];
+    session.dataFd[STREAM_WORK] = fds[1];
+    EXPECT_CALL(mockUARTBase, UartToHdcProtocol)
+        .WillRepeatedly([&](uv_stream_t *s, uint8_t *d, int sz) {
+            return mockUARTBase.HdcUARTBase::UartToHdcProtocol(s, d, sz);
+        });
+    EXPECT_EQ(mockUARTBase.UartToHdcProtocol(&stream, nullptr, 0), 0);
+    close(fds[0]);
+    close(fds[1]);
+}
+
+// ValidateUartPacket：flag 错误 → ERR_BUF_CHECK
+HWTEST_F(HdcUARTBaseTest, ValidateUartPacket_BadFlag, TestSize.Level1)
+{
+    std::vector<uint8_t> buf(sizeof(UartHead), 0);
+    UartHead *head = reinterpret_cast<UartHead *>(buf.data());
+    head->flag[0] = 'X';
+    head->flag[1] = 'Y';
+    head->UpdateCheckSum();
+    uint32_t sid = 0, idx = 0;
+    size_t len = 0;
+    EXPECT_EQ(mockUARTBase.ValidateUartPacket(buf, sid, idx, len), ERR_BUF_CHECK);
+}
+
+// ValidateUartPacket：head checksum 错误 → ERR_BUF_CHECK
+HWTEST_F(HdcUARTBaseTest, ValidateUartPacket_BadHeadChecksum, TestSize.Level1)
+{
+    std::vector<uint8_t> buf(sizeof(UartHead), 0);
+    UartHead *head = reinterpret_cast<UartHead *>(buf.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->headCheckSum = 0; // 故意错误
+    uint32_t sid = 0, idx = 0;
+    size_t len = 0;
+    EXPECT_EQ(mockUARTBase.ValidateUartPacket(buf, sid, idx, len), ERR_BUF_CHECK);
+}
+
+// ValidateUartPacket：data checksum 错误 → ERR_BUF_CHECK
+HWTEST_F(HdcUARTBaseTest, ValidateUartPacket_BadDataChecksum, TestSize.Level1)
+{
+    const uint32_t dataSize = 8;
+    std::vector<uint8_t> buf(sizeof(UartHead) + dataSize, 0);
+    UartHead *head = reinterpret_cast<UartHead *>(buf.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = 1234;
+    head->dataSize = dataSize;
+    head->UpdateCheckSum();
+    // 篡改数据使 data checksum 不匹配
+    buf[sizeof(UartHead)] = 0xFF;
+    uint32_t sid = 0, idx = 0;
+    size_t len = 0;
+    EXPECT_CALL(mockUARTBase, ProcessResponsePackage).Times(0);
+    EXPECT_EQ(mockUARTBase.ValidateUartPacket(buf, sid, idx, len), ERR_BUF_CHECK);
+}
+
+// ValidateUartPacket：PKG_OPTION_FREE → 调用 Restartession
+HWTEST_F(HdcUARTBaseTest, ValidateUartPacket_PkgOptionFree, TestSize.Level1)
+{
+    const uint32_t dataSize = 4;
+    std::vector<uint8_t> buf(sizeof(UartHead) + dataSize, 0);
+    UartHead *head = reinterpret_cast<UartHead *>(buf.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = 4321;
+    head->dataSize = dataSize;
+    head->option = PKG_OPTION_FREE;
+    head->UpdateCheckSum();
+    uint32_t sid = 0, idx = 0;
+    size_t len = 0;
+    EXPECT_CALL(mockUARTBase, GetSession(4321, false)).WillOnce(Return(nullptr));
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans).Times(AnyNumber());
+    EXPECT_CALL(mockUARTBase, ClearUARTOutMap).Times(0);
+    EXPECT_EQ(mockUARTBase.ValidateUartPacket(buf, sid, idx, len), RET_SUCCESS);
+}
+
+// ValidateUartPacket：Response 包 NAK → 调用 ProcessResponsePackage
+HWTEST_F(HdcUARTBaseTest, ValidateUartPacket_ResponsePackageNak, TestSize.Level1)
+{
+    std::vector<uint8_t> buf(sizeof(UartHead), 0);
+    UartHead *head = reinterpret_cast<UartHead *>(buf.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = 999;
+    head->dataSize = 0;
+    head->option = PKG_OPTION_NAK;
+    head->UpdateCheckSum();
+    uint32_t sid = 0, idx = 0;
+    size_t len = 0;
+    EXPECT_CALL(mockUARTBase, ProcessResponsePackage(::testing::Ref(*head))).Times(1);
+    EXPECT_EQ(mockUARTBase.ValidateUartPacket(buf, sid, idx, len), RET_SUCCESS);
+}
+
+// ValidateUartPacket：普通包 → 调用 ResponseUartTrans ACK
+HWTEST_F(HdcUARTBaseTest, ValidateUartPacket_PlainPackageResponseAck, TestSize.Level1)
+{
+    const uint32_t dataSize = 4;
+    std::vector<uint8_t> buf(sizeof(UartHead) + dataSize, 0);
+    UartHead *head = reinterpret_cast<UartHead *>(buf.data());
+    head->flag[0] = PACKET_FLAG[0];
+    head->flag[1] = PACKET_FLAG[1];
+    head->sessionId = 888;
+    head->dataSize = dataSize;
+    head->option = 0; // 非 response
+    head->UpdateCheckSum();
+    uint32_t sid = 0, idx = 0;
+    size_t len = 0;
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans(888, head->packageIndex, PKG_OPTION_ACK)).Times(1);
+    EXPECT_EQ(mockUARTBase.ValidateUartPacket(buf, sid, idx, len), RET_SUCCESS);
+}
+
+// ResponseUartTrans：PKG_OPTION_ACK
+HWTEST_F(HdcUARTBaseTest, ResponseUartTrans_OptionAck, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans)
+        .WillRepeatedly([&](uint32_t sid, uint32_t idx, UartProtocolOption opt) {
+            return mockUARTBase.HdcUARTBase::ResponseUartTrans(sid, idx, opt);
+        });
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, sizeof(UartHead), false));
+    mockUARTBase.ResponseUartTrans(100, 200, PKG_OPTION_ACK);
+}
+
+// ResponseUartTrans：PKG_OPTION_NAK
+HWTEST_F(HdcUARTBaseTest, ResponseUartTrans_OptionNak, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans)
+        .WillRepeatedly([&](uint32_t sid, uint32_t idx, UartProtocolOption opt) {
+            return mockUARTBase.HdcUARTBase::ResponseUartTrans(sid, idx, opt);
+        });
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, sizeof(UartHead), false));
+    mockUARTBase.ResponseUartTrans(100, 200, PKG_OPTION_NAK);
+}
+
+// ResponseUartTrans：PKG_OPTION_RESET
+HWTEST_F(HdcUARTBaseTest, ResponseUartTrans_OptionReset, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans)
+        .WillRepeatedly([&](uint32_t sid, uint32_t idx, UartProtocolOption opt) {
+            return mockUARTBase.HdcUARTBase::ResponseUartTrans(sid, idx, opt);
+        });
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, sizeof(UartHead), false));
+    mockUARTBase.ResponseUartTrans(100, 200, PKG_OPTION_RESET);
+}
+
+// ResponseUartTrans：PKG_OPTION_TAIL
+HWTEST_F(HdcUARTBaseTest, ResponseUartTrans_OptionTail, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ResponseUartTrans)
+        .WillRepeatedly([&](uint32_t sid, uint32_t idx, UartProtocolOption opt) {
+            return mockUARTBase.HdcUARTBase::ResponseUartTrans(sid, idx, opt);
+        });
+    EXPECT_CALL(mockUARTBase, RequestSendPackage(_, sizeof(UartHead), false));
+    mockUARTBase.ResponseUartTrans(100, 200, PKG_OPTION_TAIL);
+}
+
+// DispatchToWorkThread：null session → ERR_SESSION_NOFOUND
+HWTEST_F(HdcUARTBaseTest, DispatchToWorkThread_NullSession, TestSize.Level1)
+{
+    uint8_t buf[16] = {0};
+    EXPECT_EQ(mockUARTBase.DispatchToWorkThread(nullptr, buf, sizeof(buf)), ERR_SESSION_NOFOUND);
+}
+
+// DispatchToWorkThread：UartSendToHdcStream 返回 false → ERR_IO_FAIL
+HWTEST_F(HdcUARTBaseTest, DispatchToWorkThread_SendFail, TestSize.Level1)
+{
+    uint8_t buf[4] = {0}; // size < sizeof(UartHead) → UartSendToHdcStream returns false
+    EXPECT_EQ(mockUARTBase.DispatchToWorkThread(server.get(), buf, sizeof(buf)), ERR_IO_FAIL);
+}
+
+// PackageProcess：空数据 → 返回 0
+HWTEST_F(HdcUARTBaseTest, PackageProcess_EmptyData, TestSize.Level1)
+{
+    std::vector<uint8_t> data;
+    EXPECT_EQ(mockUARTBase.PackageProcess(data, nullptr), 0u);
+}
+
+// PackageProcess：数据不足一个 head 且 >1 字节 → 返回 sizeof(UartHead)
+HWTEST_F(HdcUARTBaseTest, PackageProcess_PartialData, TestSize.Level1)
+{
+    std::vector<uint8_t> data(3, 0xAA); // 3 bytes, < sizeof(UartHead)
+    EXPECT_EQ(mockUARTBase.PackageProcess(data, nullptr), sizeof(UartHead));
+}
+
+// PackageProcess：bad magic → ValidateUartPacket 返回错误 → 数据被清空
+HWTEST_F(HdcUARTBaseTest, PackageProcess_BadMagic, TestSize.Level1)
+{
+    std::vector<uint8_t> data(sizeof(UartHead) + 4, 0);
+    UartHead *head = reinterpret_cast<UartHead *>(data.data());
+    head->flag[0] = 'X';
+    head->flag[1] = 'Y';
+    EXPECT_EQ(mockUARTBase.PackageProcess(data, nullptr), 0u);
+    EXPECT_TRUE(data.empty());
+}
+
+// StopSession：null hSession → 不崩溃
+HWTEST_F(HdcUARTBaseTest, StopSession_NullSession, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ClearUARTOutMap).Times(0);
+    mockUARTBase.StopSession(nullptr);
+}
+
+// ClearUARTOutMap：空 outPkgs → 不崩溃
+HWTEST_F(HdcUARTBaseTest, ClearUARTOutMap_EmptyNoCrash, TestSize.Level1)
+{
+    EXPECT_CALL(mockUARTBase, ClearUARTOutMap)
+        .WillRepeatedly([&](uint32_t sid) {
+            mockUARTBase.HdcUARTBase::ClearUARTOutMap(sid);
+        });
+    mockUARTBase.ClearUARTOutMap(12345);
+}
+
+// SendPkgInUARTOutMap：空 outPkgs → 不崩溃
+HWTEST_F(HdcUARTBaseTest, SendPkgInUARTOutMap_EmptyNoCrash, TestSize.Level1)
+{
+    mockUARTBase.HdcUARTBase::SendPkgInUARTOutMap();
+    SUCCEED();
+}
+
+// EnsureAllPkgsSent：空 outPkgs → 不崩溃
+HWTEST_F(HdcUARTBaseTest, EnsureAllPkgsSent_EmptyNoCrash, TestSize.Level1)
+{
+    mockUARTBase.HdcUARTBase::EnsureAllPkgsSent();
+    SUCCEED();
+}
 } // namespace Hdc

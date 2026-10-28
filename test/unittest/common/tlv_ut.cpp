@@ -319,4 +319,53 @@ HWTEST_F(HdcTLVTest, TlvBuf_Display_001, TestSize.Level0)
     delete[] tlv;
 }
 
+// 空 TlvBuf 查找任意 tag：返回 false，不崩溃（覆盖 FindTlv 未命中分支）
+HWTEST_F(HdcTLVTest, TlvBuf_FindTlv_EmptyBufReturnsFalse, TestSize.Level0)
+{
+    TlvBuf tb;
+    ASSERT_EQ(tb.GetBufSize(), 0);
+    uint32_t flen = 0;
+    uint8_t *fval = nullptr;
+    EXPECT_FALSE(tb.FindTlv(1, flen, fval));
+    EXPECT_EQ(fval, nullptr);
+    string sval;
+    EXPECT_FALSE(tb.FindTlv(1, sval));
+}
+
+// CopyToBuf 传入 size=0：返回 false（覆盖 dst 容量不足边界）
+HWTEST_F(HdcTLVTest, TlvBuf_CopyToBuf_ZeroSizeReturnsFalse, TestSize.Level0)
+{
+    uint32_t tag = 1;
+    const uint32_t len = 4;
+    uint8_t val[len] = { 0x11 };
+    TlvBuf tb;
+    ASSERT_EQ(tb.Append(tag, len, val), true);
+    uint8_t buf[8] = { 0 };
+    EXPECT_FALSE(tb.CopyToBuf(buf, 0));
+    EXPECT_FALSE(tb.CopyToBuf(nullptr, 0));
+}
+
+// 多次 Append 不同 tag 后 GetBufSize 累加正确（覆盖累加分支）
+HWTEST_F(HdcTLVTest, TlvBuf_GetBufSize_MultipleAppends, TestSize.Level0)
+{
+    TlvBuf tb;
+    EXPECT_EQ(tb.GetBufSize(), 0);
+    uint8_t val[4] = { 0xAB };
+    EXPECT_TRUE(tb.Append(1, sizeof(val), val));
+    EXPECT_TRUE(tb.Append(2, sizeof(val), val));
+    EXPECT_TRUE(tb.Append(3, sizeof(val), val));
+    EXPECT_EQ(tb.GetBufSize(), TlvSize(sizeof(val)) * 3);
+}
+
+// 字符串 Append 后用 string FindTlv 查不到的 tag：返回 false，val 不变（覆盖字符串未命中分支）
+HWTEST_F(HdcTLVTest, TlvBuf_FindTlv_StringNotFound, TestSize.Level0)
+{
+    TlvBuf tb;
+    string val = "hdc";
+    ASSERT_TRUE(tb.Append(1, val));
+    string out = "unchanged";
+    EXPECT_FALSE(tb.FindTlv(2, out));
+    EXPECT_EQ(out, "unchanged");
+}
+
 } // namespace Hdc

@@ -262,4 +262,48 @@ HWTEST_F(HandleTest, CallStatGuard_CommitTwice_001, TestSize.Level0)
     ASSERT_FALSE(mLoopStatus->Busy());
 }
 
+// HandleStart 传入 nullptr loop：走空 loop 早返回分支，不崩溃
+HWTEST_F(HandleTest, HandleStart_NullLoop_NoCrash, TestSize.Level0)
+{
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HandleStart(nullptr, "NullLoop"));
+}
+
+// HandleStart 传入不匹配 loop：走 not match 分支，不崩溃
+HWTEST_F(HandleTest, HandleStart_MismatchedLoop_NoCrash, TestSize.Level0)
+{
+    uv_loop_t other;
+    ASSERT_EQ(uv_loop_init(&other), 0);
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HandleStart(&other, "OtherLoop"));
+    uv_loop_close(&other);
+}
+
+// HandleEnd 传入不匹配 loop：走 not match 分支，不崩溃
+HWTEST_F(HandleTest, HandleEnd_MismatchedLoop_NoCrash, TestSize.Level0)
+{
+    uv_loop_t other;
+    ASSERT_EQ(uv_loop_init(&other), 0);
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HandleEnd(&other));
+    uv_loop_close(&other);
+}
+
+// HandleEnd 在 idle 状态调用：走 idle now 分支，不崩溃
+HWTEST_F(HandleTest, HandleEnd_IdleState_NoCrash, TestSize.Level0)
+{
+    EXPECT_FALSE(mLoopStatus->Busy());
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HandleEnd(&mLoop));
+}
+
+// Display 在 idle 与 all=true/false 各分支：不崩溃
+HWTEST_F(HandleTest, Display_IdleState_NoCrash, TestSize.Level0)
+{
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->Display("ut-info", true));
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->Display("ut-info", false));
+}
+
+// HungCheck 传入 timeout=0：覆盖超时判定分支，不崩溃
+HWTEST_F(HandleTest, HungCheck_ZeroTimeout_NoCrash, TestSize.Level0)
+{
+    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HungCheck(0));
+}
+
 } // namespace Hdc

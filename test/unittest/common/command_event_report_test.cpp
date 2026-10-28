@@ -122,4 +122,46 @@ HWTEST_F(HdcCommandEventReportTest, TestGetCommand_UnknowCommand, TestSize.Level
     std::string command;
     EXPECT_FALSE(GetCommandFromInputRaw(input.c_str(), command));
 }
+
+HWTEST_F(HdcCommandEventReportTest, TestGetCommand_TargetMount, TestSize.Level0)
+{
+    std::string input = "target mount";
+    std::string command;
+    EXPECT_TRUE(GetCommandFromInputRaw(input.c_str(), command));
+    EXPECT_EQ(command, CMDSTR_TARGET_MOUNT);
+}
+
+HWTEST_F(HdcCommandEventReportTest, TestGetCommand_ListJdwp, TestSize.Level0)
+{
+    // CMDSTR_LIST_JDWP = "jpid",  Compare 列表使用 strcmp 精确匹配
+    std::string input = "jpid";
+    std::string command;
+    EXPECT_TRUE(GetCommandFromInputRaw(input.c_str(), command));
+    EXPECT_EQ(command, CMDSTR_LIST_JDWP);
+}
+
+HWTEST_F(HdcCommandEventReportTest, TestGetCommand_Hilog, TestSize.Level0)
+{
+    std::string input = "hilog";
+    std::string command;
+    EXPECT_TRUE(GetCommandFromInputRaw(input.c_str(), command));
+    EXPECT_EQ(command, CMDSTR_HILOG);
+}
+
+HWTEST_F(HdcCommandEventReportTest, TestGetCommand_FileSend, TestSize.Level0)
+{
+    std::string input = "file send local remote";
+    std::string command;
+    EXPECT_TRUE(GetCommandFromInputRaw(input.c_str(), command));
+    EXPECT_EQ(command, CMDSTR_FILE_SEND);
+}
+
+HWTEST_F(HdcCommandEventReportTest, TestGetCommand_AppInstall, TestSize.Level0)
+{
+    // CMDSTR_APP_INSTALL = "install",  nCompare 列表使用 strncmp 前缀匹配
+    std::string input = "install demo.hap";
+    std::string command;
+    EXPECT_TRUE(GetCommandFromInputRaw(input.c_str(), command));
+    EXPECT_EQ(command, CMDSTR_APP_INSTALL);
+}
 }

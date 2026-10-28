@@ -913,4 +913,457 @@ HWTEST_F(HdcForwardBaseTest, DoForwardBegin_InvalidType, TestSize.Level0)
     delete ctx;
 }
 
+// ReadyForRelease：初始 refCount=0 → true
+HWTEST_F(HdcForwardBaseTest, ReadyForRelease_InitialTrue, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_TRUE(forward.ReadyForRelease());
+    delete info;
+}
+
+// StopTask：默认实现设置 singalStop，不崩溃
+HWTEST_F(HdcForwardBaseTest, StopTask_NoCrash, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_NO_FATAL_FAILURE(forward.StopTask());
+    delete info;
+}
+
+// CheckNodeInfo：tcp:1（最小合法端口）
+HWTEST_F(HdcForwardBaseTest, CheckNodeInfo_TcpPortOne, TestSize.Level0)
+{
+    std::string as[2];
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_TRUE(forward.CheckNodeInfo("tcp:1", as));
+    EXPECT_EQ(as[0], "tcp");
+    EXPECT_EQ(as[1], "1");
+    delete info;
+}
+
+// CheckNodeInfo：tcp:65535（MAX_IP_PORT 边界）
+HWTEST_F(HdcForwardBaseTest, CheckNodeInfo_TcpPortMax, TestSize.Level0)
+{
+    std::string as[2];
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_TRUE(forward.CheckNodeInfo("tcp:65535", as));
+    EXPECT_EQ(as[1], "65535");
+    delete info;
+}
+
+// CheckNodeInfo：tcp 端口字符串过长（>5 字符）
+HWTEST_F(HdcForwardBaseTest, CheckNodeInfo_TcpPortStrTooLong, TestSize.Level0)
+{
+    std::string as[2];
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_FALSE(forward.CheckNodeInfo("tcp:123456", as));
+    delete info;
+}
+
+// CheckNodeInfo：多个冒号
+HWTEST_F(HdcForwardBaseTest, CheckNodeInfo_MultiColon, TestSize.Level0)
+{
+    std::string as[2];
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_TRUE(forward.CheckNodeInfo("a:b:c", as));
+    EXPECT_EQ(as[0], "a");
+    EXPECT_EQ(as[1], "b:c");
+    delete info;
+}
+
+// AllocForwardBuf：size=1 → len=0（size-1）
+HWTEST_F(HdcForwardBaseTest, AllocForwardBuf_SizeOne, TestSize.Level0)
+{
+    uv_handle_t dummyHandle;
+    uv_buf_t buf;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.AllocForwardBuf(&dummyHandle, 1, &buf);
+    ASSERT_NE(buf.base, nullptr);
+    EXPECT_EQ(buf.len, 0u);
+    delete info;
+    delete[] buf.base;
+}
+
+// AllocForwardBuf：size 接近 MAX_USBFFS_BULK
+HWTEST_F(HdcForwardBaseTest, AllocForwardBuf_SizeCloseToMax, TestSize.Level0)
+{
+    size_t sizeSuggested = MAX_USBFFS_BULK - 1;
+    uv_handle_t dummyHandle;
+    uv_buf_t buf;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.AllocForwardBuf(&dummyHandle, sizeSuggested, &buf);
+    ASSERT_NE(buf.base, nullptr);
+    EXPECT_EQ(buf.len, sizeSuggested - 1);
+    delete info;
+    delete[] buf.base;
+}
+
+// MallocContext：单次分配后 refCount=1
+HWTEST_F(HdcForwardBaseTest, MallocContext_SingleRefCount, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = forward.MallocContext(true);
+    EXPECT_NE(ctx, nullptr);
+    EXPECT_EQ(forward.refCount, 1);
+    delete (HdcForwardBase::ContextForward*)ctx;
+    delete info;
+}
+
+// MallocContext：多次分配 refCount 递增
+HWTEST_F(HdcForwardBaseTest, MallocContext_MultipleRefCount, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* c1 = forward.MallocContext(true);
+    auto* c2 = forward.MallocContext(false);
+    auto* c3 = forward.MallocContext(true);
+    EXPECT_NE(c1, nullptr);
+    EXPECT_NE(c2, nullptr);
+    EXPECT_NE(c3, nullptr);
+    EXPECT_EQ(forward.refCount, 3);
+    delete (HdcForwardBase::ContextForward*)c1;
+    delete (HdcForwardBase::ContextForward*)c2;
+    delete (HdcForwardBase::ContextForward*)c3;
+    delete info;
+}
+
+// FreeContext：ctxIn=null 且 id 不在 map → 直接返回
+HWTEST_F(HdcForwardBaseTest, FreeContext_NullCtxInNotFound, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_NO_FATAL_FAILURE(forward.FreeContext(nullptr, 999999, false));
+    delete info;
+}
+
+// FreeContext：ctx->finish=true → 直接返回
+HWTEST_F(HdcForwardBaseTest, FreeContext_CtxFinish, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->id = 100;
+    ctx->finish = true;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_NO_FATAL_FAILURE(forward.FreeContext(ctx, 0, false));
+    delete ctx;
+    delete info;
+}
+
+// StopTask：单个 ctx
+HWTEST_F(HdcForwardBaseTest, StopTask_SingleEntry, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    ctx->id = 1;
+    ctx->type = HdcForwardBase::FORWARD_TCP;
+    ctx->thisClass = &forward;
+    ctx->finish = true;
+    forward.mapCtxPoint[1] = ctx;
+    EXPECT_FALSE(forward.mapCtxPoint.empty());
+    forward.StopTask();
+    EXPECT_TRUE(forward.mapCtxPoint.empty());
+    delete ctx;
+    delete info;
+}
+
+// StopTask：三个 ctx
+HWTEST_F(HdcForwardBaseTest, StopTask_ThreeEntries, TestSize.Level0)
+{
+    auto* c1 = new HdcForwardBase::ContextForward();
+    auto* c2 = new HdcForwardBase::ContextForward();
+    auto* c3 = new HdcForwardBase::ContextForward();
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    c1->id = 1; c1->finish = true; c1->type = HdcForwardBase::FORWARD_TCP; c1->thisClass = &forward;
+    c2->id = 2; c2->finish = true; c2->type = HdcForwardBase::FORWARD_ABSTRACT; c2->thisClass = &forward;
+    c3->id = 3; c3->finish = true; c3->type = HdcForwardBase::FORWARD_JDWP; c3->thisClass = &forward;
+    forward.mapCtxPoint[1] = c1;
+    forward.mapCtxPoint[2] = c2;
+    forward.mapCtxPoint[3] = c3;
+    EXPECT_EQ(forward.mapCtxPoint.size(), 3u);
+    forward.StopTask();
+    EXPECT_TRUE(forward.mapCtxPoint.empty());
+    delete c1;
+    delete c2;
+    delete c3;
+    delete info;
+}
+
+// CommandDispatch：未知 command → ForwardCommandDispatch → ctx 不存在 → true
+HWTEST_F(HdcForwardBaseTest, CommandDispatch_UnknownCmd, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    uint8_t payload[16] = {0};
+    EXPECT_TRUE(forward.CommandDispatch(9999, payload, 16));
+    delete info;
+}
+
+// CommandDispatch：CMD_FORWARD_INIT 空命令 → BeginForward 失败 → false
+HWTEST_F(HdcForwardBaseTest, CommandDispatch_InitEmpty, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;  // LogMsg 使用 fprintf（安全）
+    HdcForwardBase forward(info);
+    uint8_t empty[] = "";
+    EXPECT_FALSE(forward.CommandDispatch(CMD_FORWARD_INIT, empty, 0));
+    delete info;
+}
+
+// CommandDispatch：CMD_FORWARD_CHECK 短 payload → SlaveConnect 失败 → false
+HWTEST_F(HdcForwardBaseTest, CommandDispatch_CheckShortPayload, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+    uint8_t payload[4] = {0};
+    EXPECT_FALSE(forward.CommandDispatch(CMD_FORWARD_CHECK, payload, 4));
+    delete info;
+}
+
+// ForwardCommandDispatch：payloadSize <= DWORD_SERIALIZE_SIZE 且非 FREE_CONTEXT/ACTIVE_MASTER → false
+HWTEST_F(HdcForwardBaseTest, ForwardCmdDispatch_PayloadTooSmall, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    uint8_t payload[4] = {0};
+    EXPECT_FALSE(forward.ForwardCommandDispatch(9999, payload, 4));
+    delete info;
+}
+
+// ForwardCommandDispatch：ctx 不存在 → true
+HWTEST_F(HdcForwardBaseTest, ForwardCmdDispatch_NoCtxFound, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    uint8_t payload[16] = {0};
+    *reinterpret_cast<uint32_t*>(payload) = htonl(88888);
+    EXPECT_TRUE(forward.ForwardCommandDispatch(9999, payload, 16));
+    delete info;
+}
+
+// ForwardCommandDispatch：CMD_FORWARD_FREE_CONTEXT，ctx finish=true → 早期返回
+HWTEST_F(HdcForwardBaseTest, ForwardCmdDispatch_FreeContextFinish, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->id = 100;
+    ctx->finish = true;
+    forward.AdminContext(OP_ADD, 100, ctx);
+    uint8_t payload[8] = {0};
+    *reinterpret_cast<uint32_t*>(payload) = htonl(100);
+    EXPECT_TRUE(forward.ForwardCommandDispatch(CMD_FORWARD_FREE_CONTEXT, payload, 8));
+    forward.AdminContext(OP_REMOVE, 100, nullptr);
+    delete ctx;
+    delete info;
+}
+
+// SetupJdwpPoint：默认虚实现返回 false
+HWTEST_F(HdcForwardBaseTest, SetupJdwpPoint_DefaultFalse, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    EXPECT_FALSE(forward.SetupJdwpPoint(ctx));
+    delete ctx;
+    delete info;
+}
+
+// SetupArkPoint：默认虚实现返回 false
+HWTEST_F(HdcForwardBaseTest, SetupArkPoint_DefaultFalse, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    EXPECT_FALSE(forward.SetupArkPoint(ctx));
+    delete ctx;
+    delete info;
+}
+
+// DetechForwardType：localreserved 路径穿越 → false
+HWTEST_F(HdcForwardBaseTest, DetechForwardType_ReservedTraversal, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->localArgs[0] = "localreserved";
+    ctx->localArgs[1] = "../bad";
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_FALSE(forward.DetechForwardType(ctx));
+    delete info;
+    delete ctx;
+}
+
+// DetechForwardType：localfilesystem 路径穿越 → false
+HWTEST_F(HdcForwardBaseTest, DetechForwardType_FilesystemTraversal, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->localArgs[0] = "localfilesystem";
+    ctx->localArgs[1] = "../bad";
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_FALSE(forward.DetechForwardType(ctx));
+    delete info;
+    delete ctx;
+}
+
+// AdminContext：查询不存在的 id → nullptr
+HWTEST_F(HdcForwardBaseTest, AdminContext_QueryNonExist, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_EQ(forward.AdminContext(OP_QUERY, 99999, nullptr), nullptr);
+    delete info;
+}
+
+// AdminContext：删除不存在的 id → 不崩溃
+HWTEST_F(HdcForwardBaseTest, AdminContext_RemoveNonExist, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_NO_FATAL_FAILURE(forward.AdminContext(OP_REMOVE, 99999, nullptr));
+    delete info;
+}
+
+// AdminContext：未知 op → 不崩溃
+HWTEST_F(HdcForwardBaseTest, AdminContext_UnknownOp, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_NO_FATAL_FAILURE(forward.AdminContext(99, 100, nullptr));
+    delete info;
+}
+
+// SendToTask：bufSize 超过上限 → false
+HWTEST_F(HdcForwardBaseTest, SendToTask_SizeTooLarge, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    int tooLarge = Base::GetMaxBufSizeStable() * BUF_MULTIPLE + 1;
+    uint8_t buf[1] = {0};
+    EXPECT_FALSE(forward.SendToTask(1, CMD_FORWARD_DATA, buf, tooLarge));
+    delete info;
+}
+
+// SlaveConnect：bufSize 过小 → false
+HWTEST_F(HdcForwardBaseTest, SlaveConnect_BufSizeTooSmall, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    uint8_t buf[8] = {0};
+    string sError;
+    EXPECT_FALSE(forward.SlaveConnect(buf, 8, true, sError));
+    delete info;
+}
+
+// BeginForward：空命令 → false
+HWTEST_F(HdcForwardBaseTest, BeginForward_EmptyCommand, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    string sError;
+    EXPECT_FALSE(forward.BeginForward("", sError));
+    delete info;
+}
+
+// BeginForward：单参数（argc<2）→ false
+HWTEST_F(HdcForwardBaseTest, BeginForward_ShortArgs, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    string sError;
+    EXPECT_FALSE(forward.BeginForward("tcp:8080", sError));
+    delete info;
+}
+
+// BeginForward：非法节点格式 → false
+HWTEST_F(HdcForwardBaseTest, BeginForward_InvalidNode, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    string sError;
+    EXPECT_FALSE(forward.BeginForward("invalid bad", sError));
+    delete info;
+}
+
+// GetForwardStream：FORWARD_TCP → &ctx->tcp
+HWTEST_F(HdcForwardBaseTest, GetForwardStream_TCP, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->type = HdcForwardBase::FORWARD_TCP;
+    uv_stream_t *s = forward.GetForwardStream(ctx);
+    EXPECT_EQ(s, (uv_stream_t*)&ctx->tcp);
+    delete ctx;
+    delete info;
+}
+
+// GetForwardStream：FORWARD_JDWP → &ctx->tcp
+HWTEST_F(HdcForwardBaseTest, GetForwardStream_JDWP, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->type = HdcForwardBase::FORWARD_JDWP;
+    uv_stream_t *s = forward.GetForwardStream(ctx);
+    EXPECT_EQ(s, (uv_stream_t*)&ctx->tcp);
+    delete ctx;
+    delete info;
+}
+
+// GetForwardStream：FORWARD_ABSTRACT → &ctx->pipe
+HWTEST_F(HdcForwardBaseTest, GetForwardStream_Abstract, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->type = HdcForwardBase::FORWARD_ABSTRACT;
+    uv_stream_t *s = forward.GetForwardStream(ctx);
+    EXPECT_EQ(s, (uv_stream_t*)&ctx->pipe);
+    delete ctx;
+    delete info;
+}
+
+// ReadyForRelease：MallocContext 后 refCount>0 → false
+HWTEST_F(HdcForwardBaseTest, ReadyForRelease_AfterMalloc, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    auto* ctx = forward.MallocContext(true);
+    EXPECT_FALSE(forward.ReadyForRelease());
+    delete (HdcForwardBase::ContextForward*)ctx;
+    delete info;
+}
+
+// SendToTask：bufSize=0 → 分配+发送（singalStop 阻止 SendToAnother）
+HWTEST_F(HdcForwardBaseTest, SendToTask_ZeroBufSize, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.singalStop = true;  // SendToAnother 直接返回 false
+    EXPECT_FALSE(forward.SendToTask(1, CMD_FORWARD_FREE_CONTEXT, nullptr, 0));
+    delete info;
+}
+
+// CheckNodeInfo：非 tcp 类型不校验端口
+HWTEST_F(HdcForwardBaseTest, CheckNodeInfo_NonTcpNoPortCheck, TestSize.Level0)
+{
+    std::string as[2];
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    EXPECT_TRUE(forward.CheckNodeInfo("jdwp:123", as));
+    EXPECT_EQ(as[0], "jdwp");
+    delete info;
+}
+
 } // namespace Hdc

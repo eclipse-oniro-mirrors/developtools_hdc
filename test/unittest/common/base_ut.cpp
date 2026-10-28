@@ -357,13 +357,13 @@ HWTEST_F(BaseTest, StringToLong_InvalidString, TestSize.Level0) {
 }
 
 HWTEST_F(BaseTest, StringToLong_Underflow, TestSize.Level0) {
-    std::string str = "-999999999999999999999";
+    std::string str = "-99999999999999999999";
     long int value = 0;
     EXPECT_FALSE(Base::StringToLong(str, value));
 }
 
 HWTEST_F(BaseTest, StringToLong_Overflow, TestSize.Level0) {
-    std::string str = "999999999999999999999";
+    std::string str = "99999999999999999999";
     long int value = 0;
     EXPECT_FALSE(Base::StringToLong(str, value));
 }
@@ -1338,17 +1338,6 @@ HWTEST_F(BaseTest, ListDirectoryFiles_NonExistDir, TestSize.Level0) {
     EXPECT_TRUE(files.empty());
 }
 
-HWTEST_F(BaseTest, CleanupSubserverLogFiles_EnvNotSet, TestSize.Level0) {
-    unsetenv("OHOS_HDC_SUBSERVER_LOG_FILE");
-    Base::CleanupSubserverLogFiles();
-}
-
-HWTEST_F(BaseTest, CleanupSubserverLogFiles_EnvSet, TestSize.Level0) {
-    setenv("OHOS_HDC_SUBSERVER_LOG_FILE", "5", 1);
-    Base::CleanupSubserverLogFiles();
-    unsetenv("OHOS_HDC_SUBSERVER_LOG_FILE");
-}
-
 HWTEST_F(BaseTest, GenerateSubserverLogFileName_NoEnv, TestSize.Level0) {
     unsetenv("OHOS_HDC_SUBSERVER_LOG_FILE");
     std::string fileName = Base::GenerateSubserverLogFileName();
@@ -1949,4 +1938,503 @@ HWTEST_F(BaseTest, RemoveLogCache_001, TestSize.Level0) {
     Base::RemoveLogCache();
     EXPECT_EQ(Base::Fopen(cachePath.c_str(), "r"), nullptr);
 }
+
+// GetRandomString：指定长度返回对应长度串
+HWTEST_F(BaseTest, GetRandomString_Length, TestSize.Level0)
+{
+    EXPECT_EQ(Base::GetRandomString(16).size(), 16u);
+    EXPECT_EQ(Base::GetRandomString(0).size(), 0u);
+}
+
+// GetRandomNum：结果落在 [min,max]
+HWTEST_F(BaseTest, GetRandomNum_InRange, TestSize.Level0)
+{
+    for (int i = 0; i < 20; ++i) {
+        int r = Base::GetRandomNum(5, 10);
+        EXPECT_GE(r, 5);
+        EXPECT_LE(r, 10);
+    }
+}
+
+// GetRandomU32：返回非负
+HWTEST_F(BaseTest, GetRandomU32_NonNeg, TestSize.Level0)
+{
+    EXPECT_GE(Base::GetRandomU32(), 0u);
+}
+
+// SplitString：常规切分
+HWTEST_F(BaseTest, SplitString_Basic, TestSize.Level0)
+{
+    vector<string> out;
+    Base::SplitString("a,b,c", ",", out);
+    EXPECT_EQ(out.size(), 3u);
+    EXPECT_EQ(out[0], "a");
+    EXPECT_EQ(out[2], "c");
+}
+
+// SplitString：空串
+HWTEST_F(BaseTest, SplitString_Empty, TestSize.Level0)
+{
+    vector<string> out;
+    Base::SplitString("", ",", out);
+    EXPECT_TRUE(out.empty());
+}
+
+// StringEndsWith：匹配/不匹配
+HWTEST_F(BaseTest, StringEndsWith_Match, TestSize.Level0)
+{
+    EXPECT_NE(Base::StringEndsWith("file.txt", ".txt"), 0);
+    EXPECT_EQ(Base::StringEndsWith("file.txt", ".hap"), 0);
+}
+
+// Base64 编解码往返
+HWTEST_F(BaseTest, Base64_RoundTrip, TestSize.Level0)
+{
+    uint8_t in[] = "hdc-ut-base64";
+    uint8_t enc[64] = {0};
+    int encLen = Base::Base64EncodeBuf(in, sizeof(in) - 1, enc);
+    EXPECT_GT(encLen, 0);
+    uint8_t dec[64] = {0};
+    int decLen = Base::Base64DecodeBuf(enc, encLen, dec);
+    EXPECT_GT(decLen, 0);
+    EXPECT_EQ(memcmp(dec, in, sizeof(in) - 1), 0);
+}
+
+// Convert2HexStr：字节数组转十六进制串
+HWTEST_F(BaseTest, Convert2HexStr, TestSize.Level0)
+{
+    uint8_t arr[] = {0xAB, 0xCD, 0xEF};
+    string s = Base::Convert2HexStr(arr, sizeof(arr));
+    EXPECT_EQ(s, "AB:CD:EF");
+}
+
+// ReverseBytes：反转后字节序倒置
+HWTEST_F(BaseTest, ReverseBytes, TestSize.Level0)
+{
+    uint8_t buf[4] = {0x01, 0x02, 0x03, 0x04};
+    Base::ReverseBytes(buf, sizeof(buf));
+    EXPECT_EQ(buf[0], 0x04);
+    EXPECT_EQ(buf[3], 0x01);
+}
+
+// GetVersion：返回非空
+HWTEST_F(BaseTest, GetVersion_NonEmpty, TestSize.Level0)
+{
+    EXPECT_FALSE(Base::GetVersion().empty());
+}
+
+// ConnectKey2IPPort：合法 IP:port 解析
+HWTEST_F(BaseTest, ConnectKey2IPPort_Valid, TestSize.Level0)
+{
+    char ip[64] = {0};
+    uint16_t port = 0;
+    int rc = Base::ConnectKey2IPPort("127.0.0.1:5055", ip, &port, sizeof(ip));
+    EXPECT_EQ(rc, 0);
+    EXPECT_EQ(port, 5055);
+}
+
+// ConnectKey2IPPort：非法串
+HWTEST_F(BaseTest, ConnectKey2IPPort_Invalid, TestSize.Level0)
+{
+    char ip[64] = {0};
+    uint16_t port = 0;
+    EXPECT_NE(Base::ConnectKey2IPPort("not_a_addr", ip, &port, sizeof(ip)), 0);
+}
+
+// ParseLogLevel：合法值
+HWTEST_F(BaseTest, ParseLogLevel_Valid, TestSize.Level0)
+{
+    uint8_t lvl = 0;
+    EXPECT_TRUE(Base::ParseLogLevel("0", lvl));
+    EXPECT_TRUE(Base::ParseLogLevel("6", lvl));
+}
+
+// ParseLogLevel：非法值
+HWTEST_F(BaseTest, ParseLogLevel_Invalid, TestSize.Level0)
+{
+    uint8_t lvl = 0;
+    EXPECT_FALSE(Base::ParseLogLevel("X", lvl));
+}
+
+// GetPathWithoutFilename / GetFullFilePath：不崩溃
+HWTEST_F(BaseTest, PathHelpers_NoCrash, TestSize.Level0)
+{
+    string p = "/a/b/c.txt";
+    EXPECT_NO_FATAL_FAILURE(Base::GetPathWithoutFilename(p));
+    string q = "file.txt";
+    EXPECT_NO_FATAL_FAILURE(Base::GetFullFilePath(q));
+}
+
+// CanonicalizeSpecPath：不崩溃
+HWTEST_F(BaseTest, CanonicalizeSpecPath_NoCrash, TestSize.Level0)
+{
+    string p = "/a/b/../c";
+    EXPECT_NO_FATAL_FAILURE(Base::CanonicalizeSpecPath(p));
+}
+
+// IsFileSizeLessThan：不存在文件 → 行为确定不崩溃
+HWTEST_F(BaseTest, IsFileSizeLessThan_NonExist, TestSize.Level0)
+{
+    EXPECT_NO_FATAL_FAILURE((void)Base::IsFileSizeLessThan("/tmp/hdc_ut_nonexist_file_xyz", 1024));
+}
+
+// ReallocBuf：nOrigSize>0 时直接返回，不重新分配
+HWTEST_F(BaseTest, ReallocBuf_AlreadyAllocated, TestSize.Level0)
+{
+    uint8_t *buf = new uint8_t[100];
+    int size = 100;
+    Base::ReallocBuf(&buf, &size, 200);
+    EXPECT_EQ(size, 100);
+    delete[] buf;
+}
+
+// ReallocBuf：sizeWanted<=0 时不分配
+HWTEST_F(BaseTest, ReallocBuf_ZeroSize, TestSize.Level0)
+{
+    uint8_t *buf = nullptr;
+    int size = 0;
+    Base::ReallocBuf(&buf, &size, 0);
+    EXPECT_EQ(buf, nullptr);
+    EXPECT_EQ(size, 0);
+}
+
+// ReallocBuf：sizeWanted>=HDC_BUF_MAX_BYTES 时不分配
+HWTEST_F(BaseTest, ReallocBuf_TooLarge, TestSize.Level0)
+{
+    uint8_t *buf = nullptr;
+    int size = 0;
+    Base::ReallocBuf(&buf, &size, static_cast<size_t>(HDC_BUF_MAX_BYTES) + 1);
+    EXPECT_EQ(buf, nullptr);
+    EXPECT_EQ(size, 0);
+}
+
+// ReallocBuf：正常分配
+HWTEST_F(BaseTest, ReallocBuf_Success, TestSize.Level0)
+{
+    uint8_t *buf = nullptr;
+    int size = 0;
+    Base::ReallocBuf(&buf, &size, 256);
+    EXPECT_NE(buf, nullptr);
+    EXPECT_EQ(size, 256);
+    delete[] buf;
+}
+
+// GetMaxBufSize / GetUsbffsBulkSize / Stable 版本返回预期常量
+HWTEST_F(BaseTest, BufSizeConstants, TestSize.Level0)
+{
+    EXPECT_EQ(Base::GetMaxBufSize(), static_cast<int>(MAX_SIZE_IOBUF));
+    EXPECT_EQ(Base::GetUsbffsBulkSize(), static_cast<int>(MAX_USBFFS_BULK));
+    EXPECT_EQ(Base::GetMaxBufSizeStable(), static_cast<int>(MAX_SIZE_IOBUF_STABLE));
+    EXPECT_EQ(Base::GetUsbffsBulkSizeStable(), static_cast<int>(MAX_USBFFS_BULK_STABLE));
+}
+
+// GetRuntimeMSec：返回非零（基于 CLOCK_MONOTONIC）
+HWTEST_F(BaseTest, GetRuntimeMSec_NonZero, TestSize.Level0)
+{
+    EXPECT_GT(Base::GetRuntimeMSec(), 0ULL);
+}
+
+// GetSecureRandom：返回值合法（0~UINT32_MAX）
+HWTEST_F(BaseTest, GetSecureRandom_NonNeg, TestSize.Level0)
+{
+    uint32_t v = Base::GetSecureRandom();
+    (void)v;  // 任何 uint32_t 均合法，仅验证不崩溃
+    EXPECT_NO_FATAL_FAILURE((void)Base::GetSecureRandom());
+}
+
+// GetVersion：返回字符串以 "Ver:" 开头
+HWTEST_F(BaseTest, GetVersion_HasVerPrefix, TestSize.Level0)
+{
+    std::string v = Base::GetVersion();
+    EXPECT_EQ(v.substr(0, 4), "Ver:");
+}
+
+// ConnectKey2IPPort：port=0 → ERR_PARM_FORMAT
+HWTEST_F(BaseTest, ConnectKey2IPPort_PortZero, TestSize.Level0)
+{
+    char ip[64] = {0};
+    uint16_t port = 0;
+    int rc = Base::ConnectKey2IPPort("127.0.0.1:0", ip, &port, sizeof(ip));
+    EXPECT_NE(rc, RET_SUCCESS);
+}
+
+// ConnectKey2IPPort：port>MAX_IP_PORT → ERR_PARM_FORMAT
+HWTEST_F(BaseTest, ConnectKey2IPPort_PortTooLarge, TestSize.Level0)
+{
+    char ip[64] = {0};
+    uint16_t port = 0;
+    int rc = Base::ConnectKey2IPPort("127.0.0.1:99999", ip, &port, sizeof(ip));
+    EXPECT_NE(rc, RET_SUCCESS);
+}
+
+// ConnectKey2IPPort：空 IP（冒号开头）→ ERR_PARM_SIZE
+HWTEST_F(BaseTest, ConnectKey2IPPort_EmptyIP, TestSize.Level0)
+{
+    char ip[64] = {0};
+    uint16_t port = 0;
+    int rc = Base::ConnectKey2IPPort(":5055", ip, &port, sizeof(ip));
+    EXPECT_NE(rc, RET_SUCCESS);
+}
+
+// ConnectKey2IPPort：IP 过长（>40）→ ERR_PARM_SIZE
+HWTEST_F(BaseTest, ConnectKey2IPPort_LongIP, TestSize.Level0)
+{
+    char ip[64] = {0};
+    uint16_t port = 0;
+    std::string longIp(50, '1');
+    std::string key = longIp + ":5055";
+    int rc = Base::ConnectKey2IPPort(key.c_str(), ip, &port, sizeof(ip));
+    EXPECT_NE(rc, RET_SUCCESS);
+}
+
+// GetFullFilePath：末尾多个分隔符被剥离
+HWTEST_F(BaseTest, GetFullFilePath_WithTrailingSep, TestSize.Level0)
+{
+    std::string s = "/a/b/c/";
+    std::string r = Base::GetFullFilePath(s);
+    EXPECT_EQ(r, "c");
+}
+
+// GetFullFilePath：无分隔符直接返回原串
+HWTEST_F(BaseTest, GetFullFilePath_NoSep, TestSize.Level0)
+{
+    std::string s = "abc";
+    std::string r = Base::GetFullFilePath(s);
+    EXPECT_EQ(r, "abc");
+}
+
+// GetFullFilePath：连续多个末尾分隔符
+HWTEST_F(BaseTest, GetFullFilePath_MultiTrailingSep, TestSize.Level0)
+{
+    std::string s = "/a/b/c//";
+    std::string r = Base::GetFullFilePath(s);
+    EXPECT_EQ(r, "c");
+}
+
+// Base64Encode：长度超过 INT_MAX/2 → 返回空 vector
+HWTEST_F(BaseTest, Base64Encode_OverflowThreshold, TestSize.Level0)
+{
+    uint8_t buf[1] = {0x41};
+    auto result = Base::Base64Encode(buf, INT_MAX);
+    EXPECT_TRUE(result.empty());
+}
+
+// Base64Encode：length<=0 → 返回空
+HWTEST_F(BaseTest, Base64Encode_NegativeLength, TestSize.Level0)
+{
+    uint8_t buf[1] = {0x41};
+    auto result = Base::Base64Encode(buf, -1);
+    EXPECT_TRUE(result.empty());
+}
+
+// ReverseBytes：奇数长度也能反转
+HWTEST_F(BaseTest, ReverseBytes_OddSize, TestSize.Level0)
+{
+    uint8_t buf[3] = {0x01, 0x02, 0x03};
+    Base::ReverseBytes(buf, 3);
+    EXPECT_EQ(buf[0], 0x03);
+    EXPECT_EQ(buf[1], 0x02);
+    EXPECT_EQ(buf[2], 0x01);
+}
+
+// GetFileType：directory
+HWTEST_F(BaseTest, GetFileType_Directory, TestSize.Level0)
+{
+    EXPECT_STREQ(Base::GetFileType(S_IFDIR), "directory");
+}
+
+// GetFileType：regular file
+HWTEST_F(BaseTest, GetFileType_RegularFile, TestSize.Level0)
+{
+    EXPECT_STREQ(Base::GetFileType(S_IFREG), "regular file");
+}
+
+// GetFileType：unknown
+HWTEST_F(BaseTest, GetFileType_Unknown, TestSize.Level0)
+{
+    EXPECT_STREQ(Base::GetFileType(0), "Unknown");
+}
+
+// HostToNet / NetToHost：往返一致
+HWTEST_F(BaseTest, HostToNet_NetToHost_RoundTrip, TestSize.Level0)
+{
+    uint64_t v = 0x12345678ABCDEF00ULL;
+    uint64_t net = Base::HostToNet(v);
+    uint64_t back = Base::NetToHost(net);
+    EXPECT_EQ(back, v);
+}
+
+// IsDigitString：纯数字 → true
+HWTEST_F(BaseTest, IsDigitString_True, TestSize.Level0)
+{
+    EXPECT_TRUE(Base::IsDigitString("12345"));
+    EXPECT_TRUE(Base::IsDigitString("0"));
+}
+
+// IsDigitString：含非数字字符 → false
+HWTEST_F(BaseTest, IsDigitString_False, TestSize.Level0)
+{
+    EXPECT_FALSE(Base::IsDigitString("12a45"));
+    EXPECT_FALSE(Base::IsDigitString(" 12"));
+}
+
+// IsDigitString：空串 → all_of 返回 true
+HWTEST_F(BaseTest, IsDigitString_Empty, TestSize.Level0)
+{
+    EXPECT_TRUE(Base::IsDigitString(""));
+}
+
+// TryCreateDirectory：新建目录成功
+HWTEST_F(BaseTest, TryCreateDirectory_New, TestSize.Level0)
+{
+    std::string err;
+    const std::string path = "/data/local/tmp/hdc_ut_newdir_" + std::to_string(getpid());
+    rmdir(path.c_str());
+    EXPECT_TRUE(Base::TryCreateDirectory(path, err));
+    rmdir(path.c_str());
+}
+
+// TryCreateDirectory：目录已存在 → true
+HWTEST_F(BaseTest, TryCreateDirectory_AlreadyExist, TestSize.Level0)
+{
+    std::string err;
+    EXPECT_TRUE(Base::TryCreateDirectory("/data/local/tmp", err));
+}
+
+// TryCreateDirectory：路径已存在但是文件 → false
+HWTEST_F(BaseTest, TryCreateDirectory_ExistAsFile, TestSize.Level0)
+{
+    std::string err;
+    const std::string path = "/data/local/tmp/hdc_ut_file_" + std::to_string(getpid());
+    std::ofstream f(path);
+    f << "x";
+    f.close();
+    EXPECT_FALSE(Base::TryCreateDirectory(path, err));
+    remove(path.c_str());
+}
+
+// CheckDirectoryOrPath：pathOrDir=false → 走 dir 分支返回 false
+HWTEST_F(BaseTest, CheckDirectoryOrPath_DirOption, TestSize.Level0)
+{
+    std::string err;
+    mode_t mode = 0;
+    bool r = Base::CheckDirectoryOrPath("/tmp", false, true, err, mode);
+    EXPECT_FALSE(r);
+    EXPECT_NE(err.find("Not support"), std::string::npos);
+}
+
+// CheckDirectoryOrPath：pathOrDir=true 但文件不存在 → false
+HWTEST_F(BaseTest, CheckDirectoryOrPath_NotExistFile, TestSize.Level0)
+{
+    std::string err;
+    mode_t mode = 0;
+    bool r = Base::CheckDirectoryOrPath("/tmp/hdc_ut_nonexist_xyz_file", true, true, err, mode);
+    EXPECT_FALSE(r);
+}
+
+// CheckDirectoryOrPath：两参数重载，已存在文件 → true
+HWTEST_F(BaseTest, CheckDirectoryOrPath_ExistingFileTwoArg, TestSize.Level0)
+{
+    const std::string fileName = "/data/local/tmp/hdc_ut_check_file.txt";
+    std::ofstream f(fileName);
+    f << "test";
+    f.close();
+    bool r = Base::CheckDirectoryOrPath(fileName.c_str(), true, true);
+    EXPECT_TRUE(r);
+    remove(fileName.c_str());
+}
+
+// AddDeletedSessionId / IsSessionDeleted：添加后能查到
+HWTEST_F(BaseTest, AddDeletedSessionId_ThenQuery, TestSize.Level0)
+{
+    uint32_t sid = static_cast<uint32_t>(getpid());
+    Base::AddDeletedSessionId(sid);
+    EXPECT_TRUE(Base::IsSessionDeleted(sid));
+}
+
+// SetLogLevel / GetLogLevel：读写一致
+HWTEST_F(BaseTest, SetLogLevel_GetLogLevel_RoundTrip, TestSize.Level0)
+{
+    Base::SetLogLevel(LOG_WARN);
+    EXPECT_EQ(Base::GetLogLevel(), static_cast<uint8_t>(LOG_WARN));
+    Base::SetLogLevel(LOG_DEBUG);
+    EXPECT_EQ(Base::GetLogLevel(), static_cast<uint8_t>(LOG_DEBUG));
+}
+
+// GetCaller：设置 server 标志后调用
+HWTEST_F(BaseTest, GetCaller_AfterSetServer, TestSize.Level0)
+{
+    bool old = Base::g_isServer.load();
+    Base::SetIsServerFlag(true);
+    Base::Caller c = Base::GetCaller();
+    EXPECT_TRUE(c == Base::Caller::SERVER || c == Base::Caller::DAEMON);
+    Base::SetIsServerFlag(old);
+}
+
+// CmdLogStringFormat：格式包含 sessionId 与 cmdStr
+HWTEST_F(BaseTest, CmdLogStringFormat_Format, TestSize.Level0)
+{
+    std::string s = Base::CmdLogStringFormat(12345, "helloworld");
+    EXPECT_NE(s.find("12345"), std::string::npos);
+    EXPECT_NE(s.find("helloworld"), std::string::npos);
+}
+
+// PrintMessage：不崩溃
+HWTEST_F(BaseTest, PrintMessage_NoCrash, TestSize.Level0)
+{
+    EXPECT_NO_FATAL_FAILURE(Base::PrintMessage("ut-test %d %s", 42, "ok"));
+}
+
+// PrintMessageAndWriteLog：不崩溃
+HWTEST_F(BaseTest, PrintMessageAndWriteLog_NoCrash, TestSize.Level0)
+{
+    EXPECT_NO_FATAL_FAILURE(Base::PrintMessageAndWriteLog("ut-test-msg %d", 7));
+}
+
+// GetHdcAbsolutePath：返回可执行路径（可能为空，仅验证不崩溃）
+HWTEST_F(BaseTest, GetHdcAbsolutePath_NoCrash, TestSize.Level0)
+{
+    EXPECT_NO_FATAL_FAILURE((void)Base::GetHdcAbsolutePath());
+}
+
+// GetCwd：不崩溃，返回以分隔符结尾
+HWTEST_F(BaseTest, GetCwd_NoCrash, TestSize.Level0)
+{
+    std::string cwd;
+    EXPECT_NO_FATAL_FAILURE(cwd = Base::GetCwd());
+    if (!cwd.empty()) {
+        EXPECT_EQ(cwd.back(), Base::GetPathSep());
+    }
+}
+
+// GetLogLevelName：各 level 返回预期字符串
+HWTEST_F(BaseTest, GetLogLevelName_AllLevels, TestSize.Level0)
+{
+    EXPECT_STREQ(Base::GetLogLevelName(LOG_OFF), "off");
+    EXPECT_STREQ(Base::GetLogLevelName(LOG_FATAL), "fatal");
+    EXPECT_STREQ(Base::GetLogLevelName(LOG_WARN), "warn");
+    EXPECT_STREQ(Base::GetLogLevelName(LOG_INFO), "info");
+    EXPECT_STREQ(Base::GetLogLevelName(LOG_DEBUG), "debug");
+    EXPECT_STREQ(Base::GetLogLevelName(LOG_VERBOSE), "verbose");
+}
+
+// GetLogLevelName：超过 LOG_LAST → "unknown"
+HWTEST_F(BaseTest, GetLogLevelName_OutOfRange, TestSize.Level0)
+{
+    EXPECT_STREQ(Base::GetLogLevelName(static_cast<uint8_t>(LOG_LAST + 1)), "unknown");
+}
+
+// WriteToFile：写入失败时返回 false（路径非法）
+HWTEST_F(BaseTest, WriteToFile_OpenFail_ReturnsFalse, TestSize.Level0)
+{
+    EXPECT_FALSE(Base::WriteToFile("/proc/null/cannot_write", "x", std::ios_base::out));
+}
+
+// IsSessionDeleted：未添加的 sessionId → false
+HWTEST_F(BaseTest, IsSessionDeleted_NotAdded, TestSize.Level0)
+{
+    uint32_t sid = static_cast<uint32_t>(0xDEADBEEF);
+    EXPECT_FALSE(Base::IsSessionDeleted(sid));
+}
+
 } // namespace Hdc

@@ -340,4 +340,330 @@ HWTEST_F(HdcFileTest, TestCheckBundleAndPath, TestSize.Level0)
     ASSERT_TRUE(result);
 }
 
+// CheckBundleAndPath：daemon 模式（serverOrDaemon=false）不崩溃
+HWTEST_F(HdcFileTest, TestCheckBundleAndPath_DaemonMode, TestSize.Level0)
+{
+    HdcFile::CtxFile ctxNow;
+    hTaskInfo->serverOrDaemon = false;
+    EXPECT_NO_FATAL_FAILURE((void)mockHdcdFile->CheckBundleAndPath());
+}
+
+// CheckBundleAndPath：连续两次调用不崩溃（覆盖重复进入分支）
+HWTEST_F(HdcFileTest, TestCheckBundleAndPath_Twice, TestSize.Level0)
+{
+    hTaskInfo->serverOrDaemon = true;
+    EXPECT_NO_FATAL_FAILURE((void)mockHdcdFile->CheckBundleAndPath());
+    EXPECT_NO_FATAL_FAILURE((void)mockHdcdFile->CheckBundleAndPath());
+}
+
+// ====== Incremental UT cases (2026) ======
+
+// BeginTransfer：argc < CMD_ARG1_COUNT → false
+HWTEST_F(HdcFileTest, BeginTransfer_TooFewArgs, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    EXPECT_FALSE(mockHdcdFile->BeginTransfer(&context, "single"));
+}
+
+// BeginTransfer：未知选项 → SetMasterParameters 失败 → false
+HWTEST_F(HdcFileTest, BeginTransfer_UnknownOption, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    EXPECT_FALSE(mockHdcdFile->BeginTransfer(&context, "-x local remote"));
+}
+
+// BeginTransfer：黑名单路径 → false
+HWTEST_F(HdcFileTest, BeginTransfer_BlacklistPath, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    EXPECT_FALSE(mockHdcdFile->BeginTransfer(&context, "/data/service/el1/public/hdc test.txt"));
+}
+
+// CheckBlacklistPath：第二条黑名单
+HWTEST_F(HdcFileTest, CheckBlacklistPath_SecondBlacklist, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    context.localPath = "/data/service/el2/public/hdc_service";
+    ASSERT_FALSE(mockHdcdFile->CheckBlacklistPath(&context));
+}
+
+// CheckBlacklistPath：空路径 → true
+HWTEST_F(HdcFileTest, CheckBlacklistPath_EmptyPath, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    context.localPath = "";
+    ASSERT_TRUE(mockHdcdFile->CheckBlacklistPath(&context));
+}
+
+// CheckBlacklistPath：合法长路径 → true
+HWTEST_F(HdcFileTest, CheckBlacklistPath_ValidLongPath, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    context.localPath = "/data/local/tmp/sub/dir/file.txt";
+    ASSERT_TRUE(mockHdcdFile->CheckBlacklistPath(&context));
+}
+
+// containsBlacklistedSubstring：命中
+HWTEST_F(HdcFileTest, ContainsBlacklistedSubstring_Match, TestSize.Level0)
+{
+    std::unordered_set<std::string> blacklist = {"/bad/path"};
+    EXPECT_TRUE(mockHdcdFile->containsBlacklistedSubstring("/bad/path/file", blacklist));
+}
+
+// containsBlacklistedSubstring：未命中
+HWTEST_F(HdcFileTest, ContainsBlacklistedSubstring_NoMatch, TestSize.Level0)
+{
+    std::unordered_set<std::string> blacklist = {"/bad/path"};
+    EXPECT_FALSE(mockHdcdFile->containsBlacklistedSubstring("/good/path/file", blacklist));
+}
+
+// ParseMasterParameters：-z 压缩选项
+HWTEST_F(HdcFileTest, ParseMasterParameters_ZipOption, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argFirst[] = "-cwd";
+    char argRemote[] = "D:\\";
+    char argZip[] = "-z";
+    char argLocal[] = "data/local/tmp/test.txt";
+    char *argv[] = {argFirst, argRemote, argZip, argLocal};
+    int srcArgvIndex = 0;
+    EXPECT_TRUE(mockHdcdFile->ParseMasterParameters(&context, 4, argv, srcArgvIndex));
+    EXPECT_EQ(context.transferConfig.compressType, HdcFile::COMPRESS_LZ4);
+}
+
+// ParseMasterParameters：-sync 选项
+HWTEST_F(HdcFileTest, ParseMasterParameters_SyncOption, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argFirst[] = "-cwd";
+    char argRemote[] = "D:\\";
+    char argSync[] = "-sync";
+    char argLocal[] = "data/local/tmp/test.txt";
+    char *argv[] = {argFirst, argRemote, argSync, argLocal};
+    int srcArgvIndex = 0;
+    EXPECT_TRUE(mockHdcdFile->ParseMasterParameters(&context, 4, argv, srcArgvIndex));
+    EXPECT_TRUE(context.transferConfig.updateIfNew);
+}
+
+// ParseMasterParameters：-m 模式同步选项
+HWTEST_F(HdcFileTest, ParseMasterParameters_ModeSyncOption, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argFirst[] = "-cwd";
+    char argRemote[] = "D:\\";
+    char argM[] = "-m";
+    char argLocal[] = "data/local/tmp/test.txt";
+    char *argv[] = {argFirst, argRemote, argM, argLocal};
+    int srcArgvIndex = 0;
+    EXPECT_TRUE(mockHdcdFile->ParseMasterParameters(&context, 4, argv, srcArgvIndex));
+    EXPECT_TRUE(context.fileModeSync);
+}
+
+// ParseMasterParameters：-a 时间戳选项
+HWTEST_F(HdcFileTest, ParseMasterParameters_TstmpOption, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argFirst[] = "-cwd";
+    char argRemote[] = "D:\\";
+    char argA[] = "-a";
+    char argLocal[] = "data/local/tmp/test.txt";
+    char *argv[] = {argFirst, argRemote, argA, argLocal};
+    int srcArgvIndex = 0;
+    EXPECT_TRUE(mockHdcdFile->ParseMasterParameters(&context, 4, argv, srcArgvIndex));
+    EXPECT_TRUE(context.transferConfig.holdTimestamp);
+}
+
+// ParseMasterParameters：remote 参数
+HWTEST_F(HdcFileTest, ParseMasterParameters_RemoteParameter, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argRemote[] = "remote";
+    char argPath1[] = "data/local/tmp/test.txt";
+    char argPath2[] = "/data/test";
+    char *argv[] = {argRemote, argPath1, argPath2};
+    int srcArgvIndex = 0;
+    EXPECT_TRUE(mockHdcdFile->ParseMasterParameters(&context, 3, argv, srcArgvIndex));
+    EXPECT_EQ(srcArgvIndex, 1);
+}
+
+// ParseMasterParameters：未知选项 → false
+HWTEST_F(HdcFileTest, ParseMasterParameters_UnknownOption, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argUnknown[] = "-x";
+    char argPath1[] = "local";
+    char argPath2[] = "remote";
+    char *argv[] = {argUnknown, argPath1, argPath2};
+    int srcArgvIndex = 0;
+    EXPECT_FALSE(mockHdcdFile->ParseMasterParameters(&context, 3, argv, srcArgvIndex));
+}
+
+// ParseMasterParameters：argc == srcArgvIndex → 无路径 → false
+HWTEST_F(HdcFileTest, ParseMasterParameters_NoLocalRemote, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argZip[] = "-z";
+    char *argv[] = {argZip};
+    int srcArgvIndex = 0;
+    EXPECT_FALSE(mockHdcdFile->ParseMasterParameters(&context, 1, argv, srcArgvIndex));
+}
+
+// SetMasterParameters：server 模式无 remote → false
+HWTEST_F(HdcFileTest, SetMasterParameters_ServerNoRemote, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    hTaskInfo->serverOrDaemon = true;
+    char argZip[] = "-z";
+    char argLocal[] = "data/local/tmp/test.txt";
+    char *argv[] = {argZip, argLocal};
+    EXPECT_FALSE(mockHdcdFile->SetMasterParameters(&context, 2, argv));
+}
+
+// IsPathInsideSandbox：path.size() == appDir.size()
+HWTEST_F(HdcFileTest, IsPathInsideSandbox_EqualLength, TestSize.Level0)
+{
+    const string path = "/mnt/debug/100/debug_hap/com.example.app";
+    const string appDir = "/mnt/debug/100/debug_hap/com.example.app";
+    EXPECT_TRUE(mockHdcdFile->IsPathInsideSandbox(path, appDir));
+}
+
+// IsPathInsideSandbox：两个空字符串
+HWTEST_F(HdcFileTest, IsPathInsideSandbox_EmptyStrings, TestSize.Level0)
+{
+    EXPECT_TRUE(mockHdcdFile->IsPathInsideSandbox("", ""));
+}
+
+// PathSimplify：正常路径
+HWTEST_F(HdcFileTest, PathSimplify_NormalPath, TestSize.Level0)
+{
+    EXPECT_EQ(mockHdcdFile->PathSimplify("/a/b/c"), "/a/b/c");
+}
+
+// PathSimplify：../ 穿越
+HWTEST_F(HdcFileTest, PathSimplify_DotDotTraversal, TestSize.Level0)
+{
+    EXPECT_EQ(mockHdcdFile->PathSimplify("/a/b/../c"), "/a/c");
+}
+
+// PathSimplify：空路径 → "/"
+HWTEST_F(HdcFileTest, PathSimplify_EmptyPath, TestSize.Level0)
+{
+    EXPECT_EQ(mockHdcdFile->PathSimplify(""), "/");
+}
+
+// PathSimplify：. 路径被忽略
+HWTEST_F(HdcFileTest, PathSimplify_DotPath, TestSize.Level0)
+{
+    EXPECT_EQ(mockHdcdFile->PathSimplify("/a/./b"), "/a/b");
+}
+
+// PathSimplify：连续 ../ 越界不崩溃
+HWTEST_F(HdcFileTest, PathSimplify_ExcessiveDotDot, TestSize.Level0)
+{
+    EXPECT_EQ(mockHdcdFile->PathSimplify("/a/../../../b"), "/b");
+}
+
+// CheckSandboxSubPath：路径穿越 → false
+HWTEST_F(HdcFileTest, CheckSandboxSubPath_TraversalFail, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    context.bundleName = "com.example.test";
+    context.inputLocalPath = "../../etc/passwd";
+    string resolvedPath;
+    EXPECT_FALSE(mockHdcdFile->CheckSandboxSubPath(&context, resolvedPath));
+}
+
+// ValidateAndSetPaths：非沙箱模式正常
+HWTEST_F(HdcFileTest, ValidateAndSetPaths_NoSandbox, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argLocal[] = "data/local/tmp/test.txt";
+    char argRemote[] = "/data/test";
+    char *argv[] = {argLocal, argRemote};
+    int srcArgvIndex = 0;
+    EXPECT_TRUE(mockHdcdFile->ValidateAndSetPaths(&context, 2, argv, srcArgvIndex));
+    EXPECT_EQ(context.localPath, "data/local/tmp/test.txt");
+    EXPECT_EQ(context.remotePath, "/data/test");
+}
+
+// ValidateAndSetPaths：argc == srcArgvIndex → false
+HWTEST_F(HdcFileTest, ValidateAndSetPaths_NoPaths, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    char argZip[] = "-z";
+    char *argv[] = {argZip};
+    int srcArgvIndex = 1;
+    EXPECT_FALSE(mockHdcdFile->ValidateAndSetPaths(&context, 1, argv, srcArgvIndex));
+}
+
+// CheckBundleAndPath：daemon 模式非法 bundle → false
+HWTEST_F(HdcFileTest, CheckBundleAndPath_DaemonInvalidBundle, TestSize.Level0)
+{
+    hTaskInfo->serverOrDaemon = false;
+    mockHdcdFile->ctxNow.bundleName = "xx";
+    EXPECT_FALSE(mockHdcdFile->CheckBundleAndPath());
+}
+
+// CheckBundleAndPath：daemon 模式空 bundle → true
+HWTEST_F(HdcFileTest, CheckBundleAndPath_DaemonEmptyBundle, TestSize.Level0)
+{
+    hTaskInfo->serverOrDaemon = false;
+    mockHdcdFile->ctxNow.bundleName = "";
+    EXPECT_TRUE(mockHdcdFile->CheckBundleAndPath());
+}
+
+// CheckBundleAndPath：server 模式 → true
+HWTEST_F(HdcFileTest, CheckBundleAndPath_ServerMode, TestSize.Level0)
+{
+    hTaskInfo->serverOrDaemon = true;
+    mockHdcdFile->ctxNow.bundleName = "com.example.test";
+    EXPECT_TRUE(mockHdcdFile->CheckBundleAndPath());
+}
+
+// CommandDispatch：未知命令 → default → true
+HWTEST_F(HdcFileTest, CommandDispatch_UnknownCommand, TestSize.Level0)
+{
+    uint8_t payload = 0;
+    EXPECT_TRUE(mockHdcdFile->CommandDispatch(static_cast<uint16_t>(99999), &payload, 1));
+}
+
+// CommandDispatch：CMD_FILE_INIT 短命令 → false
+HWTEST_F(HdcFileTest, CommandDispatch_FileInitShort, TestSize.Level0)
+{
+    uint8_t payload[] = "x";
+    EXPECT_FALSE(mockHdcdFile->CommandDispatch(CMD_FILE_INIT, payload, 1));
+}
+
+// StopTask：验证 singalStop 被设置
+HWTEST_F(HdcFileTest, StopTask_SetsSignalStop, TestSize.Level0)
+{
+    mockHdcdFile->singalStop = false;
+    mockHdcdFile->StopTask();
+    EXPECT_TRUE(mockHdcdFile->singalStop);
+}
+
+// SetMasterParametersOnDaemon：非沙箱 + 单路径 (srcArgvIndex+1==argc 分支，localPath 取 argv[srcArgvIndex])
+HWTEST_F(HdcFileTest, SetMasterParametersOnDaemon_NonSandboxSinglePath, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    context.sandboxMode = false;
+    char argLocal[] = "data/local/tmp/test.txt";
+    char argRemote[] = "/remote";
+    char *argv[] = {argLocal, argRemote};
+    EXPECT_TRUE(mockHdcdFile->SetMasterParametersOnDaemon(&context, 2, argv, 1));
+    EXPECT_EQ(context.localPath, "/remote");
+}
+
+// SetMasterParametersOnDaemon：沙箱模式非法 bundle → false
+HWTEST_F(HdcFileTest, SetMasterParametersOnDaemon_SandboxInvalidBundle, TestSize.Level0)
+{
+    HdcFile::CtxFile context;
+    context.sandboxMode = true;
+    context.transferConfig.reserve1 = "invalid_bundle";
+    char argLocal[] = "data/local/tmp/test.txt";
+    char argRemote[] = "/remote";
+    char *argv[] = {argLocal, argRemote};
+    EXPECT_FALSE(mockHdcdFile->SetMasterParametersOnDaemon(&context, 2, argv, 0));
+}
+
 }
