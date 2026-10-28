@@ -30,7 +30,7 @@ private:
     static void BroadcastTimer(uv_idle_t *handle);
     static void Connect(uv_connect_t *connection, int status);
     void BroadcastFindDaemon(const char *broadcastLanIP);
-    void RecvUDPEntry(const sockaddr *addrSrc, uv_udp_t *handle, const uv_buf_t *rcvbuf) override;
+    void RecvUDPEntry(const sockaddr *addrSrc, uv_udp_t *handle, const uv_buf_t *rcvbuf, ssize_t nread) override;
 
     bool broadcastFindWorking;
 };

@@ -52,19 +52,51 @@ void HdcDaemonTCP::Stop()
     WRITE_LOG(LOG_INFO, "Stop tcpListenPort:%u", tcpListenPort);
 }
 
+void HdcDaemonTCP::BuildUDPReplyPayload()
+{
+    // Wire format is unchanged: HANDSHAKE_MESSAGE + "-" + <port>.
+    udpReplyPayload = HANDSHAKE_MESSAGE + "-" + std::to_string(tcpListenPort);
+}
+
 void HdcDaemonTCP::TransmitConfig(const sockaddr *addrSrc, uv_udp_t *handle)
 {
-    char srcIP[BUF_SIZE_TINY] = "";
-    struct sockaddr addrSrcIPPort;
-    uv_udp_send_t *req = new uv_udp_send_t();
-    if (!req) {
+    if (addrSrc == nullptr) {
+        WRITE_LOG(LOG_WARN, "TransmitConfig addrSrc is null");
         return;
     }
-    string sendBuf = Base::StringFormat("%s-%d", HANDSHAKE_MESSAGE.c_str(), tcpListenPort);
-    uv_buf_t sndbuf = uv_buf_init((char *)sendBuf.c_str(), sendBuf.size());
-    uv_ip4_name(const_cast<sockaddr_in *>(reinterpret_cast<const sockaddr_in *>(addrSrc)), srcIP, sizeof(srcIP));
-    uv_ip4_addr(srcIP, DEFAULT_PORT, const_cast<sockaddr_in *>(reinterpret_cast<const sockaddr_in *>(&addrSrcIPPort)));
-    uv_udp_send(req, handle, &sndbuf, 1, &addrSrcIPPort, SendUDPFinish);
+    if (handle == nullptr) {
+        WRITE_LOG(LOG_WARN, "TransmitConfig handle is null");
+        return;
+    }
+    if (addrSrc->sa_family != AF_INET) {
+        // Reading an AF_INET6 address as sockaddr_in would pick up garbage.
+        WRITE_LOG(LOG_WARN, "TransmitConfig unsupported sa_family:%d", static_cast<int>(addrSrc->sa_family));
+        return;
+    }
+    if (udpReplyPayload.empty()) {
+        WRITE_LOG(LOG_FATAL, "TransmitConfig udpReplyPayload is empty");
+        return;
+    }
+    const struct sockaddr_in *srcIn = reinterpret_cast<const struct sockaddr_in *>(addrSrc);
+    struct sockaddr_in addrDst = {};
+    addrDst.sin_family = AF_INET;
+    addrDst.sin_port = htons(DEFAULT_PORT);
+    addrDst.sin_addr = srcIn->sin_addr;
+
+    uv_buf_t sndbuf = uv_buf_init(const_cast<char *>(udpReplyPayload.data()),
+                                  static_cast<size_t>(udpReplyPayload.size()));
+    uv_udp_send_t *req = new (std::nothrow) uv_udp_send_t();
+    if (req == nullptr) {
+        WRITE_LOG(LOG_FATAL, "TransmitConfig req is null, payload size:%zu", udpReplyPayload.size());
+        return;
+    }
+    // uv_udp_send may defer the actual sendmsg, so the payload must not live on the stack.
+    int rc = uv_udp_send(req, handle, &sndbuf, 1,
+                         reinterpret_cast<const struct sockaddr *>(&addrDst), SendUDPFinish);
+    if (rc < 0) {
+        WRITE_LOG(LOG_WARN, "TransmitConfig uv_udp_send failed rc:%d", rc);
+        delete req;  // the callback is not invoked when uv_udp_send fails
+    }
 }
 
 void HdcDaemonTCP::AcceptClient(uv_stream_t *server, int /* status */)
@@ -103,8 +135,18 @@ Finish:
     ptrConnect->FreeSession(hSession->sessionId);
 }
 
-void HdcDaemonTCP::RecvUDPEntry(const sockaddr *addrSrc, uv_udp_t *handle, const uv_buf_t* /* rcvbuf */)
+void HdcDaemonTCP::RecvUDPEntry(const sockaddr *addrSrc, uv_udp_t *handle, const uv_buf_t * /* rcvbuf */,
+                                ssize_t nread)
 {
+    // A discovery request is exactly HANDSHAKE_MESSAGE with no suffix. Our own reply
+    // "OHOS HDC-<port>" is longer and is dropped here -- answering a reply is what makes
+    // two endpoints echo each other forever. nread is the payload length RecvUDP already
+    // knows (and only calls here once nread > 0), so the buffer is not rescanned for it.
+    size_t packetLen = static_cast<size_t>(nread);
+    if (packetLen != HANDSHAKE_MESSAGE.size()) {
+        WRITE_LOG(LOG_DEBUG, "RecvUDPEntry drop packet len:%zu", packetLen);
+        return;
+    }
     TransmitConfig(addrSrc, handle);
 }
 
@@ -113,6 +155,8 @@ int HdcDaemonTCP::SetUDPListen()
     struct sockaddr_in addr;
     HdcSessionBase *ptrConnect = (HdcSessionBase *)clsMainBase;
     // udp broadcast
+    // Keep plain uv_udp_init: AllocStreamUDP hands out a single small buffer, which
+    // the recvmmsg path cannot work with (it splits the buffer into 64KB chunks).
     servUDP.data = this;
     if (uv_udp_init(&ptrConnect->loopMain, &servUDP) != 0) {
         WRITE_LOG(LOG_FATAL, "uv_udp_init failed");
@@ -157,6 +201,9 @@ int HdcDaemonTCP::SetTCPListen()
     }
     tcpListenPort = ntohs(addr.sin_port);
     SystemDepend::SetDevItem("persist.hdc.port", std::to_string(tcpListenPort).c_str());
+    // The port is final here and the event loop is not running yet, so the cached
+    // reply payload can be built once and stays stable for every later send.
+    BuildUDPReplyPayload();
     return RET_SUCCESS;
 }
 
