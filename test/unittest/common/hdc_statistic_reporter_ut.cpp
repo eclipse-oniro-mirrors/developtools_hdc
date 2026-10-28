@@ -14,6 +14,8 @@
  */
 #include "hdc_statistic_reporter_ut.h"
 
+#include <limits>
+
 using namespace testing::ext;
 
 namespace Hdc {
@@ -93,8 +95,8 @@ HWTEST_F(HdcStatisticReporterTest, Test_IncrFileTransferInfo_1, TestSize.Level0)
 {
     // once
     reporter_.IncrFileTransferInfo(1, 1);
-    EXPECT_EQ(reporter_.fileTransferSize_, 1);
-    EXPECT_EQ(reporter_.fileTransferCost_, 1);
+    EXPECT_EQ(reporter_.fileTransferSize_, 1U);
+    EXPECT_EQ(reporter_.fileTransferCost_, 1U);
 }
 
 HWTEST_F(HdcStatisticReporterTest, Test_IncrFileTransferInfo_2, TestSize.Level0)
@@ -103,8 +105,8 @@ HWTEST_F(HdcStatisticReporterTest, Test_IncrFileTransferInfo_2, TestSize.Level0)
     reporter_.IncrFileTransferInfo(1, 1);
     reporter_.IncrFileTransferInfo(1, 1);
     reporter_.IncrFileTransferInfo(1, 1);
-    EXPECT_EQ(reporter_.fileTransferSize_, 3);
-    EXPECT_EQ(reporter_.fileTransferCost_, 3);
+    EXPECT_EQ(reporter_.fileTransferSize_, 3U);
+    EXPECT_EQ(reporter_.fileTransferCost_, 3U);
 }
 
 HWTEST_F(HdcStatisticReporterTest, Test_UpdateFreeSessionMaxCost, TestSize.Level0)
@@ -286,5 +288,104 @@ HWTEST_F(HdcStatisticReporterTest, Test_IncrCommandInfo_TRACK_JPID_FAIL_COUNT, T
 {
     reporter_.IncrCommandInfo(STATISTIC_ITEM::TRACK_JPID_FAIL_COUNT);
     EXPECT_EQ(reporter_.eventCnt_[static_cast<int>(STATISTIC_ITEM::TRACK_JPID_FAIL_COUNT)], 1);
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_Schedule_1, TestSize.Level0)
+{
+    uv_loop_t loop;
+    ASSERT_EQ(uv_loop_init(&loop), 0);
+    HdcStatisticReporter::GetInstance().Schedule(&loop);
+    uv_walk(&loop, [](uv_handle_t* handle, void* arg) {
+        uv_close(handle, nullptr);
+    }, nullptr);
+    uv_run(&loop, UV_RUN_NOWAIT);
+    EXPECT_EQ(uv_loop_close(&loop), 0);
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_AllEmpty, TestSize.Level0)
+{
+    reporter_.hdcVersion_ = "";
+    reporter_.connType_ = "";
+    reporter_.hostOs_ = "";
+    EXPECT_FALSE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_MissingConnType, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "", "os"});
+    EXPECT_FALSE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_MissingHostOs, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "USB", ""});
+    EXPECT_FALSE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_NoMetrics, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "USB", "win"});
+    EXPECT_FALSE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_EventCount, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "USB", "win"});
+    reporter_.IncrCommandInfo(STATISTIC_ITEM::DISCONNECT_COUNT);
+    EXPECT_TRUE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_FileTransferSize, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "USB", "win"});
+    reporter_.IncrFileTransferInfo(100, 0);
+    EXPECT_TRUE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_FileTransferCost, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "USB", "win"});
+    reporter_.IncrFileTransferInfo(0, 100);
+    EXPECT_EQ(reporter_.fileTransferSize_, 0U);
+    EXPECT_EQ(reporter_.fileTransferCost_, 100U);
+    EXPECT_TRUE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_CanReport_FreeSessionMaxCost, TestSize.Level0)
+{
+    reporter_.SetConnectInfo({"v", "USB", "win"});
+    reporter_.UpdateFreeSessionMaxCost(100);
+    EXPECT_TRUE(reporter_.CanReport());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_IncrFileTransferInfo_OverflowSize, TestSize.Level0)
+{
+    reporter_.fileTransferSize_ = std::numeric_limits<uint64_t>::max() - 1;
+    reporter_.IncrFileTransferInfo(10, 0);
+    EXPECT_EQ(reporter_.fileTransferSize_, std::numeric_limits<uint64_t>::max());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_IncrFileTransferInfo_OverflowCost, TestSize.Level0)
+{
+    reporter_.fileTransferCost_ = std::numeric_limits<uint64_t>::max() - 5;
+    reporter_.IncrFileTransferInfo(0, 10);
+    EXPECT_EQ(reporter_.fileTransferCost_, std::numeric_limits<uint64_t>::max());
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_SetConnectInfo_TooFewFeatures, TestSize.Level0)
+{
+    reporter_.hdcVersion_ = "";
+    reporter_.connType_ = "";
+    reporter_.hostOs_ = "";
+    reporter_.SetConnectInfo({"v", "USB"});
+    EXPECT_EQ(reporter_.hdcVersion_, "");
+    EXPECT_EQ(reporter_.connType_, "");
+    EXPECT_EQ(reporter_.hostOs_, "");
+}
+
+HWTEST_F(HdcStatisticReporterTest, Test_UpdateFreeSessionMaxCost_NoUpdate, TestSize.Level0)
+{
+    reporter_.UpdateFreeSessionMaxCost(-1);
+    EXPECT_EQ(reporter_.freeSessionMaxCost_, 0);
 }
 }

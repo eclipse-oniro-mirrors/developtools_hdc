@@ -1432,4 +1432,289 @@ HWTEST_F(BaseTest, CheckPathTraversal, TestSize.Level3) {
     EXPECT_FALSE(Base::CheckPathTraversal("a/../b.hap"));
     EXPECT_FALSE(Base::CheckPathTraversal("../"));
 }
+
+HWTEST_F(BaseTest, TestParseLogLevel_Valid, TestSize.Level0) {
+    uint8_t logLevel = 0;
+    EXPECT_TRUE(Base::ParseLogLevel("0", logLevel));
+    EXPECT_EQ(logLevel, 0);
+    EXPECT_TRUE(Base::ParseLogLevel("1", logLevel));
+    EXPECT_EQ(logLevel, 1);
+    EXPECT_TRUE(Base::ParseLogLevel("6", logLevel));
+    EXPECT_EQ(logLevel, 6);
+}
+
+HWTEST_F(BaseTest, TestParseLogLevel_Invalid, TestSize.Level0) {
+    uint8_t logLevel = 0;
+    EXPECT_FALSE(Base::ParseLogLevel("7", logLevel));
+    EXPECT_FALSE(Base::ParseLogLevel("a", logLevel));
+    EXPECT_FALSE(Base::ParseLogLevel("", logLevel));
+    EXPECT_FALSE(Base::ParseLogLevel("12", logLevel));
+}
+
+HWTEST_F(BaseTest, TestGetLogLevelName, TestSize.Level0) {
+    EXPECT_STREQ(Base::GetLogLevelName(0), "off");
+    EXPECT_STREQ(Base::GetLogLevelName(1), "fatal");
+    EXPECT_STREQ(Base::GetLogLevelName(2), "warn");
+    EXPECT_STREQ(Base::GetLogLevelName(3), "info");
+    EXPECT_STREQ(Base::GetLogLevelName(4), "debug");
+    EXPECT_STREQ(Base::GetLogLevelName(5), "all");
+    EXPECT_STREQ(Base::GetLogLevelName(6), "verbose");
+    EXPECT_STREQ(Base::GetLogLevelName(7), "unknown");
+}
+
+HWTEST_F(BaseTest, TestTrim, TestSize.Level0) {
+    std::string s1 = "  abc  ";
+    Base::RightTrim(s1);
+    EXPECT_EQ(s1, "  abc");
+    std::string s2 = "  abc  ";
+    Base::LeftTrim(s2);
+    EXPECT_EQ(s2, "abc  ");
+    std::string s3 = "  abc\t\n";
+    Base::Trim(s3);
+    EXPECT_EQ(s3, "abc");
+    std::string s4 = "abc";
+    Base::Trim(s4);
+    EXPECT_EQ(s4, "abc");
+    std::string s5 = "";
+    Base::RightTrim(s5);
+    EXPECT_EQ(s5, "");
+    std::string s6 = "";
+    Base::LeftTrim(s6);
+    EXPECT_EQ(s6, "");
+}
+
+HWTEST_F(BaseTest, TestIsDigitString, TestSize.Level0) {
+    EXPECT_TRUE(Base::IsDigitString("12345"));
+    EXPECT_TRUE(Base::IsDigitString("0"));
+    EXPECT_FALSE(Base::IsDigitString("12a45"));
+    EXPECT_FALSE(Base::IsDigitString("12.5"));
+}
+
+HWTEST_F(BaseTest, TestGetMaxBufSizeFuncs, TestSize.Level0) {
+    EXPECT_EQ(Base::GetMaxBufSize(), MAX_SIZE_IOBUF);
+    EXPECT_EQ(Base::GetUsbffsBulkSize(), MAX_USBFFS_BULK);
+    EXPECT_EQ(Base::GetMaxBufSizeStable(), MAX_SIZE_IOBUF_STABLE);
+    EXPECT_EQ(Base::GetUsbffsBulkSizeStable(), MAX_USBFFS_BULK_STABLE);
+}
+
+HWTEST_F(BaseTest, TestGetTarToolName, TestSize.Level0) {
+    EXPECT_EQ(Base::GetTarToolName(), LOG_COMPRESS_TOOL_NAME);
+}
+
+HWTEST_F(BaseTest, TestGetTarParams, TestSize.Level0) {
+    EXPECT_EQ(Base::GetTarParams(), LOG_COMPRESS_TOOL_PARAMS);
+}
+
+HWTEST_F(BaseTest, TestGetTarBinFile, TestSize.Level0) {
+    EXPECT_EQ(Base::GetTarBinFile(), LOG_COMPRESS_TOOL_BIN_UNIX);
+}
+
+HWTEST_F(BaseTest, TestIsDeviceFile, TestSize.Level0) {
+    EXPECT_FALSE(Base::IsDeviceFile(nullptr));
+    EXPECT_FALSE(Base::IsDeviceFile("/nonexistent/hdc_ut_device"));
+    EXPECT_FALSE(Base::IsDeviceFile("/"));
+}
+
+HWTEST_F(BaseTest, TestIsSessionDeleted_NotAdded, TestSize.Level0) {
+    EXPECT_FALSE(Base::IsSessionDeleted(0xFFFF0001));
+}
+
+HWTEST_F(BaseTest, TestAddDeletedSessionId, TestSize.Level0) {
+    Base::AddDeletedSessionId(0xFFFF0011);
+    EXPECT_TRUE(Base::IsSessionDeleted(0xFFFF0011));
+    Base::AddDeletedSessionId(0xFFFF0011);
+    EXPECT_TRUE(Base::IsSessionDeleted(0xFFFF0011));
+}
+
+HWTEST_F(BaseTest, TestAddDeletedSessionId_Overflow, TestSize.Level0) {
+    const uint32_t baseId = 0xFFFF0100;
+    for (uint32_t i = 0; i <= MAX_DELETED_SESSION_ID_RECORD_COUNT; ++i) {
+        Base::AddDeletedSessionId(baseId + i);
+    }
+    EXPECT_FALSE(Base::IsSessionDeleted(baseId));
+    EXPECT_TRUE(Base::IsSessionDeleted(baseId + MAX_DELETED_SESSION_ID_RECORD_COUNT));
+}
+
+HWTEST_F(BaseTest, TestDelayDo_NullLoop, TestSize.Level0) {
+    EXPECT_FALSE(Base::DelayDo(nullptr, 0, 0, "", nullptr,
+        [](const uint8_t, string &, const void *) {}));
+}
+
+HWTEST_F(BaseTest, TestDelayDoSimple, TestSize.Level0) {
+    uv_loop_t loop;
+    ASSERT_EQ(uv_loop_init(&loop), 0);
+    bool called = false;
+    EXPECT_TRUE(Base::DelayDoSimple(&loop, 0, [&called](const uint8_t, string &, const void *) {
+        called = true;
+    }));
+    uv_run(&loop, UV_RUN_DEFAULT);
+    EXPECT_TRUE(called);
+    EXPECT_EQ(uv_loop_close(&loop), 0);
+}
+
+HWTEST_F(BaseTest, TestDoNextLoop, TestSize.Level0) {
+    uv_loop_t loop;
+    ASSERT_EQ(uv_loop_init(&loop), 0);
+    int data = 0;
+    EXPECT_TRUE(Base::DoNextLoop(&loop, &data, [&data](const uint8_t, string &, const void *d) {
+        data = *static_cast<const int *>(d);
+    }));
+    uv_run(&loop, UV_RUN_DEFAULT);
+    EXPECT_EQ(data, 0);
+    EXPECT_EQ(uv_loop_close(&loop), 0);
+}
+
+HWTEST_F(BaseTest, TestGetRandomNum_FixedRange, TestSize.Level0) {
+    EXPECT_EQ(Base::GetRandomNum(7, 7), 7);
+    EXPECT_EQ(Base::GetRandomNum(-3, -3), -3);
+}
+
+HWTEST_F(BaseTest, TestGetRandomNum_InRange, TestSize.Level0) {
+    int value = Base::GetRandomNum(1, 100);
+    EXPECT_GE(value, 1);
+    EXPECT_LE(value, 100);
+}
+
+HWTEST_F(BaseTest, TestGetRandom_FixedRange, TestSize.Level0) {
+    EXPECT_EQ(Base::GetRandom(42, 42), 42);
+}
+
+HWTEST_F(BaseTest, TestGetRandomString, TestSize.Level0) {
+    EXPECT_EQ(Base::GetRandomString(8).size(), 8);
+    EXPECT_EQ(Base::GetRandomString(0).size(), 0);
+}
+
+HWTEST_F(BaseTest, TestGetSecureRandomString, TestSize.Level0) {
+    EXPECT_EQ(Base::GetSecureRandomString(8).size(), 8);
+}
+
+HWTEST_F(BaseTest, TestGetFileType, TestSize.Level0) {
+    EXPECT_STREQ(Base::GetFileType(S_IFDIR), "directory");
+    EXPECT_STREQ(Base::GetFileType(S_IFREG), "regular file");
+    EXPECT_STREQ(Base::GetFileType(0), "Unknown");
+}
+
+HWTEST_F(BaseTest, TestHostToNetRoundTrip, TestSize.Level0) {
+    const uint64_t value = 0x1234567890ABCDEF;
+    EXPECT_EQ(Base::NetToHost(Base::HostToNet(value)), value);
+    EXPECT_EQ(Base::HostToNet(Base::NetToHost(value)), value);
+}
+
+HWTEST_F(BaseTest, TestGetPathSep, TestSize.Level0) {
+    char sep = Base::GetPathSep();
+    EXPECT_TRUE(sep == '/' || sep == '\\');
+}
+
+HWTEST_F(BaseTest, TestGetFullFilePath, TestSize.Level0) {
+    const char sep = Base::GetPathSep();
+    string path = string("a") + sep + "b" + sep + "c" + sep;
+    EXPECT_EQ(Base::GetFullFilePath(path), "c");
+    string path2 = "plain";
+    EXPECT_EQ(Base::GetFullFilePath(path2), "plain");
+}
+
+HWTEST_F(BaseTest, TestGetFileNameAny, TestSize.Level0) {
+    const char sep = Base::GetPathSep();
+    string p1 = string("a") + sep + "b" + sep + "file.txt";
+    EXPECT_EQ(Base::GetFileNameAny(p1), "file.txt");
+    string p2 = "plain";
+    EXPECT_EQ(Base::GetFileNameAny(p2), "plain");
+    string p3 = "C:\\dir\\x.bin";
+    EXPECT_EQ(Base::GetFileNameAny(p3), "x.bin");
+}
+
+HWTEST_F(BaseTest, TestGetVersion, TestSize.Level0) {
+    EXPECT_THAT(Base::GetVersion(), HasSubstr("Ver: "));
+}
+
+HWTEST_F(BaseTest, TestGetCwd, TestSize.Level0) {
+    EXPECT_FALSE(Base::GetCwd().empty());
+}
+
+HWTEST_F(BaseTest, TestGetTmpDir, TestSize.Level0) {
+    EXPECT_FALSE(Base::GetTmpDir().empty());
+}
+
+HWTEST_F(BaseTest, TestGetRuntimeMSec, TestSize.Level0) {
+    EXPECT_GT(Base::GetRuntimeMSec(), 0);
+}
+
+HWTEST_F(BaseTest, TestGetHdcAbsolutePath, TestSize.Level0) {
+    EXPECT_FALSE(Base::GetHdcAbsolutePath().empty());
+}
+
+HWTEST_F(BaseTest, TestStringToInt, TestSize.Level0) {
+    int out = 0;
+    EXPECT_TRUE(Base::StringToInt("123", out));
+    EXPECT_EQ(out, 123);
+    EXPECT_FALSE(Base::StringToInt("", out));
+    EXPECT_FALSE(Base::StringToInt("12a", out));
+    EXPECT_FALSE(Base::StringToInt("999999999999", out));
+}
+
+HWTEST_F(BaseTest, TestBase64RoundTrip, TestSize.Level0) {
+    const char *input = "hello";
+    vector<uint8_t> encoded =
+        Base::Base64Encode(reinterpret_cast<const uint8_t *>(input), strlen(input));
+    EXPECT_FALSE(encoded.empty());
+    string decoded = Base::Base64Decode(encoded.data(), encoded.size());
+    EXPECT_EQ(decoded, "hello");
+}
+
+HWTEST_F(BaseTest, TestBase64Encode_Empty, TestSize.Level0) {
+    EXPECT_TRUE(Base::Base64Encode(nullptr, 5).empty());
+    EXPECT_TRUE(Base::Base64Encode(nullptr, 0).empty());
+    uint8_t data[] = { 1 };
+    EXPECT_TRUE(Base::Base64Encode(data, 0).empty());
+}
+
+HWTEST_F(BaseTest, TestConnectKey2IPPort, TestSize.Level0) {
+    char ip[64] = { 0 };
+    uint16_t port = 0;
+    EXPECT_EQ(Base::ConnectKey2IPPort("127.0.0.1:5555", ip, &port, sizeof(ip)), RET_SUCCESS);
+    EXPECT_EQ(port, 5555);
+    EXPECT_STREQ(ip, "127.0.0.1");
+    EXPECT_EQ(Base::ConnectKey2IPPort("no_port", ip, &port, sizeof(ip)), ERR_PARM_FORMAT);
+    EXPECT_EQ(Base::ConnectKey2IPPort("127.0.0.1:abc", ip, &port, sizeof(ip)), ERR_PARM_FORMAT);
+    EXPECT_EQ(Base::ConnectKey2IPPort(":5555", ip, &port, sizeof(ip)), ERR_PARM_SIZE);
+}
+
+HWTEST_F(BaseTest, TestStringFormat, TestSize.Level0) {
+    EXPECT_EQ(Base::StringFormat("%d-%s", 7, "x"), "7-x");
+}
+
+HWTEST_F(BaseTest, TestWriteToFdReadFromFd, TestSize.Level0) {
+    int fds[STREAM_SIZE] = { -1, -1 };
+    if (Base::CreateSocketPair(fds) == 0) {
+        const char *msg = "hi";
+        EXPECT_GT(Base::WriteToFd(fds[0], msg, strlen(msg)), 0);
+        char buf[8] = { 0 };
+        EXPECT_GT(Base::ReadFromFd(fds[1], buf, sizeof(buf)), 0);
+        EXPECT_EQ(strncmp(buf, msg, strlen(msg)), 0);
+        Base::CloseSocketPair(fds);
+    }
+}
+
+HWTEST_F(BaseTest, TestTryCreateDirectory, TestSize.Level0) {
+    string err;
+    string dirPath = Base::GetTmpDir() + "hdc_ut_dir_test";
+    EXPECT_TRUE(Base::TryCreateDirectory(dirPath, err));
+    EXPECT_TRUE(Base::TryCreateDirectory(dirPath, err));
+    string filePath = Base::GetTmpDir() + "hdc_ut_dir_file";
+    Base::WriteToFile(filePath, "x", std::ios::out);
+    EXPECT_FALSE(Base::TryCreateDirectory(filePath, err));
+}
+
+HWTEST_F(BaseTest, TestCheckDirectoryOrPath_NotExist, TestSize.Level0) {
+    string err;
+    mode_t fm = 0;
+    EXPECT_FALSE(Base::CheckDirectoryOrPath("/nonexistent_hdc_ut_path", true, true, err, fm));
+    EXPECT_FALSE(Base::CheckDirectoryOrPath("/nonexistent_hdc_ut_dir", false, true, err, fm));
+}
+
+HWTEST_F(BaseTest, TestWriteToFile, TestSize.Level0) {
+    string filePath = Base::GetTmpDir() + "hdc_ut_write_file";
+    EXPECT_TRUE(Base::WriteToFile(filePath, "content", std::ios::out));
+    EXPECT_TRUE(Base::IsFileSizeLessThan(filePath, 100));
+}
 } // namespace Hdc

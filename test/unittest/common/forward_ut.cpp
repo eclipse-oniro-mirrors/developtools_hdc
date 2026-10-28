@@ -510,4 +510,424 @@ HWTEST_F(HdcForwardBaseTest, MallocContext_AllocateAndRefCount, TestSize.Level0)
     delete (HdcForwardBase::ContextForward*)ctx2;
     delete info;
 }
+
+HWTEST_F(HdcForwardBaseTest, SendToTask_OverMaxBufSize, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    int bufSize = Base::GetMaxBufSizeStable() * BUF_MULTIPLE + 1;
+    uint8_t data = 0;
+    EXPECT_FALSE(forward.SendToTask(1, CMD_FORWARD_DATA, &data, bufSize));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, SendToTask_SingalStop, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.singalStop = true;
+
+    uint8_t data[4] = { 0x11, 0x22, 0x33, 0x44 };
+    EXPECT_FALSE(forward.SendToTask(1, CMD_FORWARD_DATA, data, 4));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, SendToTask_ZeroPayload, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.singalStop = true;
+
+    EXPECT_FALSE(forward.SendToTask(1, CMD_FORWARD_DATA, nullptr, 0));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, GetForwardStream_TypeToStreamMapping, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    ctx->type = HdcForwardBase::FORWARD_TCP;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->tcp);
+    ctx->type = HdcForwardBase::FORWARD_JDWP;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->tcp);
+    ctx->type = HdcForwardBase::FORWARD_ARK;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->tcp);
+    ctx->type = HdcForwardBase::FORWARD_ABSTRACT;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->pipe);
+    ctx->type = HdcForwardBase::FORWARD_RESERVED;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->pipe);
+    ctx->type = HdcForwardBase::FORWARD_FILESYSTEM;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->pipe);
+    ctx->type = HdcForwardBase::FORWARD_DEVICE;
+    EXPECT_EQ(forward.GetForwardStream(ctx), (uv_stream_t *)&ctx->pipe);
+
+    delete ctx;
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, SlaveConnect_SmallBufSize, TestSize.Level0)
+{
+    uint8_t bufCmd[12] = { 0 };
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    string sError;
+    EXPECT_FALSE(forward.SlaveConnect(bufCmd, sizeof(bufCmd), true, sError));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, SendForwardBuf_SizeExceedMax, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->id = 1;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    uint8_t data = 0;
+    EXPECT_EQ(forward.SendForwardBuf(ctx, &data, INT_MAX), -1);
+
+    delete ctx;
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, SendForwardBuf_SizeNotPositive, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->id = 1;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    uint8_t data = 0;
+    EXPECT_EQ(forward.SendForwardBuf(ctx, &data, 0), -1);
+    EXPECT_EQ(forward.SendForwardBuf(ctx, &data, -1), -1);
+
+    delete ctx;
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_SmallPayload, TestSize.Level0)
+{
+    uint8_t payload[4] = { 0 };
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.ForwardCommandDispatch(CMD_FORWARD_DATA, payload, 4));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_UnknownContext, TestSize.Level0)
+{
+    uint8_t payload[8] = { 0 };
+    *reinterpret_cast<uint32_t *>(payload) = htonl(0xDEADBEEF);
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_TRUE(forward.ForwardCommandDispatch(CMD_FORWARD_DATA, payload, 8));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_ActiveMasterSmallPayload, TestSize.Level0)
+{
+    uint8_t payload[4] = { 0 };
+    *reinterpret_cast<uint32_t *>(payload) = htonl(0xABCDEF01);
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_TRUE(forward.ForwardCommandDispatch(CMD_FORWARD_ACTIVE_MASTER, payload, 4));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_FreeContext, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    auto* ctx = (HdcForwardBase::ContextForward *)forward.MallocContext(false);
+    ASSERT_NE(ctx, nullptr);
+    ctx->finish = true;
+    uint8_t payload[8] = { 0 };
+    *reinterpret_cast<uint32_t *>(payload) = htonl(ctx->id);
+    EXPECT_TRUE(forward.ForwardCommandDispatch(CMD_FORWARD_FREE_CONTEXT, payload, 8));
+
+    forward.AdminContext(OP_REMOVE, ctx->id, nullptr);
+    delete ctx;
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_CheckResultFail, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+
+    auto* ctx = (HdcForwardBase::ContextForward *)forward.MallocContext(false);
+    ASSERT_NE(ctx, nullptr);
+    ctx->finish = true;
+    uint8_t payload[8] = { 0 };
+    *reinterpret_cast<uint32_t *>(payload) = htonl(ctx->id);
+    EXPECT_FALSE(forward.ForwardCommandDispatch(CMD_FORWARD_CHECK_RESULT, payload, 8));
+
+    forward.AdminContext(OP_REMOVE, ctx->id, nullptr);
+    delete ctx;
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_DefaultCommand, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+
+    auto* ctx = (HdcForwardBase::ContextForward *)forward.MallocContext(false);
+    ASSERT_NE(ctx, nullptr);
+    ctx->finish = true;
+    uint8_t payload[8] = { 0 };
+    *reinterpret_cast<uint32_t *>(payload) = htonl(ctx->id);
+    EXPECT_FALSE(forward.ForwardCommandDispatch(0x5A5A, payload, 8));
+
+    forward.AdminContext(OP_REMOVE, ctx->id, nullptr);
+    delete ctx;
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, CommandDispatch_InitInvalidCommand, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+
+    const char *cmd = "garbage";
+    EXPECT_FALSE(forward.CommandDispatch(CMD_FORWARD_INIT, (uint8_t *)cmd, 7));
+    for (auto &iter : forward.mapCtxPoint) {
+        delete iter.second;
+    }
+    forward.mapCtxPoint.clear();
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, CommandDispatch_CheckSmallPayload, TestSize.Level0)
+{
+    uint8_t payload[12] = { 0 };
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.CommandDispatch(CMD_FORWARD_CHECK, payload, 12));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, CommandDispatch_ActiveSlaveSmallPayload, TestSize.Level0)
+{
+    uint8_t payload[12] = { 0 };
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.CommandDispatch(CMD_FORWARD_ACTIVE_SLAVE, payload, 12));
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, BeginForward_InvalidCommand, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    string sError;
+    EXPECT_FALSE(forward.BeginForward("garbage", sError));
+    for (auto &iter : forward.mapCtxPoint) {
+        delete iter.second;
+    }
+    forward.mapCtxPoint.clear();
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, BeginForward_OverlongArgv, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    string longCmd(300, 'a');
+    longCmd += ":8080 tcp:1234";
+    string sError;
+    EXPECT_FALSE(forward.BeginForward(longCmd, sError));
+    for (auto &iter : forward.mapCtxPoint) {
+        delete iter.second;
+    }
+    forward.mapCtxPoint.clear();
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, ReadyForRelease_RefCountNotZero, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.refCount = 1;
+
+    EXPECT_FALSE(forward.ReadyForRelease());
+
+    delete info;
+}
+
+HWTEST_F(HdcForwardBaseTest, DetechForwardType_DevPathTraversal, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->localArgs[0] = "dev";
+    ctx->localArgs[1] = "a/../b";
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.DetechForwardType(ctx));
+    EXPECT_EQ(ctx->lastError, "Invalid path: path traversal not allowed");
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, DetechForwardType_LocalReservedPathTraversal, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->localArgs[0] = "localreserved";
+    ctx->localArgs[1] = "a/../b";
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.DetechForwardType(ctx));
+    EXPECT_EQ(ctx->lastError, "Invalid path: path traversal not allowed");
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, DetechForwardType_LocalFileSystemPathTraversal, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->localArgs[0] = "localfilesystem";
+    ctx->localArgs[1] = "a/../b";
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.DetechForwardType(ctx));
+    EXPECT_EQ(ctx->lastError, "Invalid path: path traversal not allowed");
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, SetupPoint_ArkUnsupported, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->localArgs[0] = "ark";
+    ctx->localArgs[1] = "any";
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.SetupPoint(ctx));
+    EXPECT_EQ(ctx->lastError, "Not supoort forward-type");
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, SetupPointContinue_CheckPointSendFail, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->checkPoint = true;
+    ctx->finish = true;
+    ctx->id = 1;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.singalStop = true;
+
+    EXPECT_FALSE(forward.SetupPointContinue(ctx, 0));
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, SetupPointContinue_StatusNegative, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->checkPoint = false;
+    ctx->finish = true;
+    ctx->id = 1;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.SetupPointContinue(ctx, -1));
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, SetupPointContinue_ActiveMasterSendFail, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->checkPoint = false;
+    ctx->finish = true;
+    ctx->id = 1;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+    forward.singalStop = true;
+
+    EXPECT_FALSE(forward.SetupPointContinue(ctx, 0));
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, CommandForwardCheckResult_Failed, TestSize.Level0)
+{
+    HTaskInfo info = new TaskInformation();
+    info->channelTask = true;
+    HdcForwardBase forward(info);
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->finish = true;
+    ctx->id = 1;
+
+    EXPECT_FALSE(forward.CommandForwardCheckResult(ctx, nullptr));
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, DoForwardBegin_ArkInvalidFds, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->type = HdcForwardBase::FORWARD_ARK;
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.DoForwardBegin(ctx));
+
+    delete info;
+    delete ctx;
+}
+
+HWTEST_F(HdcForwardBaseTest, DoForwardBegin_InvalidType, TestSize.Level0)
+{
+    auto* ctx = new HdcForwardBase::ContextForward();
+    ctx->type = static_cast<HdcForwardBase::FORWARD_TYPE>(99);
+    HTaskInfo info = new TaskInformation();
+    HdcForwardBase forward(info);
+
+    EXPECT_FALSE(forward.DoForwardBegin(ctx));
+
+    delete info;
+    delete ctx;
+}
 } // namespace Hdc

@@ -840,4 +840,149 @@ HWTEST_F(HdcUARTBaseTest, ResponseUartTrans, TestSize.Level1)
     EXPECT_CALL(mockUARTBase, RequestSendPackage(_, sizeof(UartHead), false));
     mockUARTBase.ResponseUartTrans(sessionId, packageIndex, PKG_OPTION_FREE);
 }
+
+/*
+ * @tc.name: HeadCtorDefault
+ * @tc.desc: Check the default ctor fields of UartHead
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadCtorDefault, TestSize.Level1)
+{
+    UartHead head;
+    EXPECT_EQ(head.flag[0], PACKET_FLAG[0]);
+    EXPECT_EQ(head.flag[1], PACKET_FLAG[1]);
+    EXPECT_EQ(head.option, 0);
+    EXPECT_EQ(head.sessionId, 0);
+    EXPECT_EQ(head.dataSize, 0);
+    EXPECT_EQ(head.packageIndex, 0);
+    EXPECT_EQ(head.dataCheckSum, 0);
+    EXPECT_EQ(head.headCheckSum, 0);
+}
+
+/*
+ * @tc.name: HeadCtorWithArgs
+ * @tc.desc: Check the parameter ctor fields of UartHead
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadCtorWithArgs, TestSize.Level1)
+{
+    UartHead head(12345, PKG_OPTION_ACK, 100, 7);
+    EXPECT_EQ(head.flag[0], PACKET_FLAG[0]);
+    EXPECT_EQ(head.flag[1], PACKET_FLAG[1]);
+    EXPECT_EQ(head.option, PKG_OPTION_ACK);
+    EXPECT_EQ(head.sessionId, 12345);
+    EXPECT_EQ(head.dataSize, 100);
+    EXPECT_EQ(head.packageIndex, 7);
+    EXPECT_EQ(head.dataCheckSum, 0);
+    EXPECT_EQ(head.headCheckSum, 0);
+}
+
+/*
+ * @tc.name: HeadOperatorEqual
+ * @tc.desc: Check the operator== of UartHead
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadOperatorEqual, TestSize.Level1)
+{
+    UartHead headA(12345, PKG_OPTION_ACK, 100, 7);
+    UartHead headB(12345, PKG_OPTION_ACK, 100, 7);
+    EXPECT_TRUE(headA == headB);
+
+    UartHead headC(54321, PKG_OPTION_ACK, 100, 7);
+    EXPECT_FALSE(headA == headC);
+
+    UartHead headD(12345, PKG_OPTION_TAIL, 100, 7);
+    EXPECT_FALSE(headA == headD);
+
+    UartHead headE(12345, PKG_OPTION_ACK, 200, 7);
+    EXPECT_FALSE(headA == headE);
+
+    UartHead headF(12345, PKG_OPTION_ACK, 100, 8);
+    EXPECT_FALSE(headA == headF);
+
+    UartHead headG;
+    headG.flag[0] = 0x11;
+    headG.option = PKG_OPTION_ACK;
+    headG.sessionId = 12345;
+    headG.dataSize = 100;
+    headG.packageIndex = 7;
+    EXPECT_FALSE(headA == headG);
+}
+
+/*
+ * @tc.name: HeadIsResponsePackage
+ * @tc.desc: Check the IsResponsePackage of UartHead
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadIsResponsePackage, TestSize.Level1)
+{
+    UartHead headAck;
+    headAck.option = PKG_OPTION_ACK;
+    EXPECT_TRUE(headAck.IsResponsePackage());
+
+    UartHead headNak;
+    headNak.option = PKG_OPTION_NAK;
+    EXPECT_TRUE(headNak.IsResponsePackage());
+
+    UartHead headTail;
+    headTail.option = PKG_OPTION_TAIL;
+    EXPECT_FALSE(headTail.IsResponsePackage());
+
+    UartHead headReset;
+    headReset.option = PKG_OPTION_RESET;
+    EXPECT_FALSE(headReset.IsResponsePackage());
+
+    UartHead headFree;
+    headFree.option = PKG_OPTION_FREE;
+    EXPECT_FALSE(headFree.IsResponsePackage());
+
+    UartHead headZero;
+    EXPECT_FALSE(headZero.IsResponsePackage());
+}
+
+/*
+ * @tc.name: HeadValidateHead
+ * @tc.desc: Check the ValidateHead of UartHead
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadValidateHead, TestSize.Level1)
+{
+    UartHead head;
+    head.sessionId = 12345;
+    head.dataSize = 100;
+    head.UpdateCheckSum();
+    EXPECT_TRUE(head.ValidateHead());
+
+    UartHead headBroken;
+    headBroken.sessionId = 12345;
+    headBroken.dataSize = 100;
+    headBroken.UpdateCheckSum();
+    headBroken.sessionId = 54321;
+    EXPECT_FALSE(headBroken.ValidateHead());
+}
+
+/*
+ * @tc.name: HeadValidateData
+ * @tc.desc: Check the ValidateData of UartHead
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadValidateData, TestSize.Level1)
+{
+    constexpr uint32_t dataSizeTest = 10;
+    uint8_t buf[sizeof(UartHead) + dataSizeTest] = { 0 };
+    UartHead *head = reinterpret_cast<UartHead *>(buf);
+    head->sessionId = 12345;
+    head->dataSize = 0;
+    EXPECT_TRUE(head->ValidateData());
+
+    head->dataSize = dataSizeTest;
+    for (uint32_t i = 0; i < dataSizeTest; ++i) {
+        buf[sizeof(UartHead) + i] = static_cast<uint8_t>(i + 1);
+    }
+    head->UpdateCheckSum();
+    EXPECT_TRUE(head->ValidateData());
+
+    buf[sizeof(UartHead) + 3] = 0xFF;
+    EXPECT_FALSE(head->ValidateData());
+}
 } // namespace Hdc

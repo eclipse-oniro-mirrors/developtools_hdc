@@ -100,4 +100,48 @@ HWTEST_F(HdcDefineTest, TestToDisplayChannelStr2, TestSize.Level1)
     
     delete channel;
 }
+
+HWTEST_F(HdcDefineTest, TestMaskStringEmpty, TestSize.Level0)
+{
+    EXPECT_EQ(MaskString(""), "");
+}
+
+HWTEST_F(HdcDefineTest, TestMaskStringShortLen, TestSize.Level0)
+{
+    EXPECT_EQ(MaskString("abc"), "a***c");
+    EXPECT_EQ(MaskString("abcdef"), "a******f");
+}
+
+HWTEST_F(HdcDefineTest, TestMaskStringLongLen, TestSize.Level0)
+{
+    EXPECT_EQ(MaskString("abcdefg"), "abc******efg(L:7)");
+}
+
+HWTEST_F(HdcDefineTest, TestMaskSessionIdToStringLong, TestSize.Level0)
+{
+    EXPECT_EQ(MaskSessionIdToString(2867909239), "286******239(L:10)");
+}
+
+HWTEST_F(HdcDefineTest, TestMaskSessionIdToStringShort, TestSize.Level0)
+{
+    EXPECT_EQ(MaskSessionIdToString(123), "1***3");
+}
+
+HWTEST_F(HdcDefineTest, TestGetConnectionErrorInfoUsb, TestSize.Level0)
+{
+    EXPECT_STREQ(GetConnectionErrorInfo(CONN_USB),
+        "[E001003] USB communication abnormal, please check the USB communication link.");
+}
+
+HWTEST_F(HdcDefineTest, TestGetConnectionErrorInfoUart, TestSize.Level0)
+{
+    EXPECT_STREQ(GetConnectionErrorInfo(CONN_SERIAL),
+        "[E001408] UART communication abnormal, please check the UART communication link.");
+}
+
+HWTEST_F(HdcDefineTest, TestGetConnectionErrorInfoUnknown, TestSize.Level0)
+{
+    EXPECT_EQ(GetConnectionErrorInfo(CONN_BT), nullptr);
+    EXPECT_EQ(GetConnectionErrorInfo(CONN_UNKNOWN), nullptr);
+}
 }
