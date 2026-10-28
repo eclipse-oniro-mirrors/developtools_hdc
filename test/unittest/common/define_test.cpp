@@ -144,4 +144,43 @@ HWTEST_F(HdcDefineTest, TestGetConnectionErrorInfoUnknown, TestSize.Level0)
     EXPECT_EQ(GetConnectionErrorInfo(CONN_BT), nullptr);
     EXPECT_EQ(GetConnectionErrorInfo(CONN_UNKNOWN), nullptr);
 }
+
+HWTEST_F(HdcDefineTest, TestToDebugString, TestSize.Level0)
+{
+    HSession session = HdcDefineTest::InstanceHSession();
+    session->serverOrDaemon = true;
+    session->sessionId = 12345;
+    session->handshakeOK = true;
+    session->connectKey = "mykey";
+    session->connType = 0;
+    std::string result = "HdcSession [ serverOrDaemon:1 sessionId:1*****5 handshakeOK:1 "
+        "connectKey:m*****y connType:0 ]";
+    ASSERT_EQ(session->ToDebugString(), result);
+    delete session;
+}
+
+HWTEST_F(HdcDefineTest, TestHdcSessionDestructorWithAllocatedMembers, TestSize.Level0)
+{
+    HSession session = HdcDefineTest::InstanceHSession();
+    ASSERT_NE(session, nullptr);
+    session->mapTask = new(std::nothrow) std::map<uint32_t, HTaskInfo>();
+    session->listKey = new(std::nothrow) std::list<void *>();
+    ASSERT_NE(session->mapTask, nullptr);
+    ASSERT_NE(session->listKey, nullptr);
+    // 析构应释放 mapTask 与 listKey，不应抛异常
+    EXPECT_NO_THROW(delete session);
+}
+
+#ifdef HDC_HOST
+HWTEST_F(HdcDefineTest, TestHdcUSBCtorDtor, TestSize.Level1)
+{
+    HdcUSB usb;
+    ASSERT_NE(usb.hostBulkIn.buf, nullptr);
+    EXPECT_EQ(usb.hostBulkIn.sizeEpBuf, 513u * 1024u);
+    ASSERT_NE(usb.hostBulkOut.buf, nullptr);
+    EXPECT_EQ(usb.hostBulkOut.sizeEpBuf, 512u * 1024u);
+    EXPECT_NE(usb.hostBulkIn.transfer, nullptr);
+    EXPECT_NE(usb.hostBulkOut.transfer, nullptr);
+}
+#endif
 }

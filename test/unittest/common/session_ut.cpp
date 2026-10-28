@@ -22,6 +22,18 @@ using namespace testing::ext;
 using namespace testing;
 
 namespace Hdc {
+namespace {
+int g_enumUsbCallbackCount = 0;
+EnumCallbackResult TestEnumUsbCallback(HSession hSession)
+{
+    ++g_enumUsbCallbackCount;
+    EnumCallbackResult result;
+    result.sessionId = hSession->sessionId;
+    result.classInstance = reinterpret_cast<HdcSessionBase *>(hSession->classInstance);
+    result.needFreeSession = false;
+    return result;
+}
+}  // namespace
 class SessionBaseTest : public ::testing::Test {
 public:
     static void SetUpTestCase(void);
@@ -400,5 +412,154 @@ HWTEST_F(SessionBaseTest, PostStopInstanceMessage_WantRestart, TestSize.Level0) 
     AsyncParam *param = static_cast<AsyncParam *>(sessionBase->lstMainThreadOP.front());
     EXPECT_EQ(param->sid, 0);
     EXPECT_EQ(param->method, ASYNC_STOP_MAINLOOP);
+}
+
+HWTEST_F(SessionBaseTest, TryRemoveTask_AlreadyFree, TestSize.Level0) {
+    HTaskInfo hTask = new TaskInformation();
+    hTask->taskFree = true;
+    EXPECT_TRUE(sessionBase->TryRemoveTask(hTask));
+    delete hTask;
+}
+
+HWTEST_F(SessionBaseTest, TryRemoveTask_RemoveSuccess, TestSize.Level0) {
+    HTaskInfo hTask = new TaskInformation();
+    hTask->taskFree = false;
+    EXPECT_TRUE(sessionBase->TryRemoveTask(hTask));
+    EXPECT_TRUE(hTask->taskFree);
+    delete hTask;
+}
+
+HWTEST_F(SessionBaseTest, GetSessionPseudoUid_NotRegistered, TestSize.Level0) {
+    uint32_t uid = sessionBase->GetSessionPseudoUid();
+    EXPECT_EQ(sessionBase->AdminSession(OP_QUERY, uid, nullptr), nullptr);
+}
+
+HWTEST_F(SessionBaseTest, BeginRemoveTask_NullTask, TestSize.Level0) {
+    EXPECT_NO_FATAL_FAILURE(sessionBase->BeginRemoveTask(nullptr));
+}
+
+HWTEST_F(SessionBaseTest, BeginRemoveTask_AlreadyStop, TestSize.Level0) {
+    HTaskInfo hTask = new TaskInformation();
+    hTask->taskStop = true;
+    hTask->taskFree = false;
+    sessionBase->BeginRemoveTask(hTask);
+    EXPECT_TRUE(hTask->taskStop);
+    EXPECT_FALSE(hTask->taskFree);
+    delete hTask;
+}
+
+HWTEST_F(SessionBaseTest, BeginRemoveTask_AlreadyFree, TestSize.Level0) {
+    HTaskInfo hTask = new TaskInformation();
+    hTask->taskStop = false;
+    hTask->taskFree = true;
+    sessionBase->BeginRemoveTask(hTask);
+    EXPECT_FALSE(hTask->taskStop);
+    EXPECT_TRUE(hTask->taskFree);
+    delete hTask;
+}
+
+HWTEST_F(SessionBaseTest, ClearOwnTasks_SingleTask, TestSize.Level0) {
+    HSession hSession = new HdcSession();
+    hSession->sessionId = 0xAAAA;
+    hSession->mapTask = new std::map<uint32_t, HTaskInfo>();
+    HTaskInfo task1 = new TaskInformation();
+    task1->channelId = 0x100;
+    task1->taskStop = true;
+    HTaskInfo task2 = new TaskInformation();
+    task2->channelId = 0x200;
+    task2->taskStop = true;
+    (*hSession->mapTask)[0x100] = task1;
+    (*hSession->mapTask)[0x200] = task2;
+
+    sessionBase->ClearOwnTasks(hSession, 0x200);
+
+    EXPECT_EQ(hSession->mapTask->size(), 1u);
+    EXPECT_NE(hSession->mapTask->find(0x100), hSession->mapTask->end());
+    EXPECT_EQ(hSession->mapTask->find(0x200), hSession->mapTask->end());
+    delete task1;
+    delete task2;
+    delete hSession;
+}
+
+HWTEST_F(SessionBaseTest, ClearOwnTasks_MultiTask, TestSize.Level0) {
+    HSession hSession = new HdcSession();
+    hSession->sessionId = 0xBBBB;
+    hSession->mapTask = new std::map<uint32_t, HTaskInfo>();
+    HTaskInfo task1 = new TaskInformation();
+    task1->channelId = 0x300;
+    task1->taskStop = true;
+    HTaskInfo task2 = new TaskInformation();
+    task2->channelId = 0x400;
+    task2->taskStop = true;
+    (*hSession->mapTask)[0x300] = task1;
+    (*hSession->mapTask)[0x400] = task2;
+
+    sessionBase->ClearOwnTasks(hSession, 0);
+
+    EXPECT_EQ(hSession->mapTask->size(), 0u);
+    delete task1;
+    delete task2;
+    delete hSession;
+}
+
+HWTEST_F(SessionBaseTest, QueryUSBDeviceRegister_NonHost, TestSize.Level0) {
+    EXPECT_EQ(sessionBase->QueryUSBDeviceRegister(nullptr, 0, 0), nullptr);
+}
+
+HWTEST_F(SessionBaseTest, EnumUSBDeviceRegister_NullCallback, TestSize.Level0) {
+    EXPECT_NO_FATAL_FAILURE(sessionBase->EnumUSBDeviceRegister(nullptr));
+}
+
+HWTEST_F(SessionBaseTest, EnumUSBDeviceRegister_EmptySessionMap, TestSize.Level0) {
+    g_enumUsbCallbackCount = 0;
+    sessionBase->EnumUSBDeviceRegister(TestEnumUsbCallback);
+    EXPECT_EQ(g_enumUsbCallbackCount, 0);
+}
+
+HWTEST_F(SessionBaseTest, EnumUSBDeviceRegister_FilterNonUsb, TestSize.Level0) {
+    HSession hSession = new HdcSession();
+    hSession->sessionId = 0xC001;
+    hSession->connType = CONN_TCP;
+    sessionBase->AdminSession(OP_ADD, 0xC001, hSession);
+
+    g_enumUsbCallbackCount = 0;
+    sessionBase->EnumUSBDeviceRegister(TestEnumUsbCallback);
+    EXPECT_EQ(g_enumUsbCallbackCount, 0);
+
+    sessionBase->AdminSession(OP_REMOVE, 0xC001, nullptr);
+    delete hSession;
+}
+
+HWTEST_F(SessionBaseTest, EnumUSBDeviceRegister_FilterNullUsb, TestSize.Level0) {
+    HSession hSession = new HdcSession();
+    hSession->sessionId = 0xC002;
+    hSession->connType = CONN_USB;
+    hSession->hUSB = nullptr;
+    sessionBase->AdminSession(OP_ADD, 0xC002, hSession);
+
+    g_enumUsbCallbackCount = 0;
+    sessionBase->EnumUSBDeviceRegister(TestEnumUsbCallback);
+    EXPECT_EQ(g_enumUsbCallbackCount, 0);
+
+    sessionBase->AdminSession(OP_REMOVE, 0xC002, nullptr);
+    delete hSession;
+}
+
+HWTEST_F(SessionBaseTest, EnumUSBDeviceRegister_InvokeCallback, TestSize.Level0) {
+    HSession hSession = new HdcSession();
+    hSession->sessionId = 0xC003;
+    hSession->connType = CONN_USB;
+    hSession->hUSB = new HdcUSB();
+    hSession->classInstance = sessionBase;
+    sessionBase->AdminSession(OP_ADD, 0xC003, hSession);
+
+    g_enumUsbCallbackCount = 0;
+    sessionBase->EnumUSBDeviceRegister(TestEnumUsbCallback);
+    EXPECT_EQ(g_enumUsbCallbackCount, 1);
+
+    sessionBase->AdminSession(OP_REMOVE, 0xC003, nullptr);
+    delete hSession->hUSB;
+    hSession->hUSB = nullptr;
+    delete hSession;
 }
 }  // namespace Hdc

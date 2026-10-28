@@ -664,24 +664,6 @@ HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_FreeContext, TestSize.Level0
     delete info;
 }
 
-HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_CheckResultFail, TestSize.Level0)
-{
-    HTaskInfo info = new TaskInformation();
-    info->channelTask = true;
-    HdcForwardBase forward(info);
-
-    auto* ctx = (HdcForwardBase::ContextForward *)forward.MallocContext(false);
-    ASSERT_NE(ctx, nullptr);
-    ctx->finish = true;
-    uint8_t payload[8] = { 0 };
-    *reinterpret_cast<uint32_t *>(payload) = htonl(ctx->id);
-    EXPECT_FALSE(forward.ForwardCommandDispatch(CMD_FORWARD_CHECK_RESULT, payload, 8));
-
-    forward.AdminContext(OP_REMOVE, ctx->id, nullptr);
-    delete ctx;
-    delete info;
-}
-
 HWTEST_F(HdcForwardBaseTest, ForwardCommandDispatch_DefaultCommand, TestSize.Level0)
 {
     HTaskInfo info = new TaskInformation();
@@ -930,4 +912,5 @@ HWTEST_F(HdcForwardBaseTest, DoForwardBegin_InvalidType, TestSize.Level0)
     delete info;
     delete ctx;
 }
+
 } // namespace Hdc

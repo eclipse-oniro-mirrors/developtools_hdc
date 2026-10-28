@@ -53,7 +53,8 @@ void SystemDependTest::TearDown() {}
 
 HWTEST_F(SystemDependTest, SetDevItem_Normal_001, TestSize.Level0)
 {
-    EXPECT_NO_FATAL_FAILURE(SystemDepend::SetDevItem(HARMLESS_SET_KEY, "1"));
+    bool ret = SystemDepend::SetDevItem(HARMLESS_SET_KEY, "1");
+    EXPECT_TRUE(ret);
 }
 
 HWTEST_F(SystemDependTest, GetDevItem_WithDefault_001, TestSize.Level0)

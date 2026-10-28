@@ -16,6 +16,7 @@
 #include "task.h"
 #include "base.h"
 #include "session.h"
+#include "channel.h"
 
 using namespace testing::ext;
 using namespace testing;
@@ -257,6 +258,45 @@ HWTEST_F(HdcTaskBaseTest, HdcTaskBase_SendToAnother_NormalPath, TestSize.Level0)
     HdcTaskBaseExpose task(info);
     EXPECT_FALSE(task.SendToAnother(CMD_KERNEL_CHANNEL_CLOSE, nullptr, 0));
 
+    delete info;
+    delete sessionBase;
+}
+
+HWTEST_F(HdcTaskBaseTest, HdcTaskBase_SendToAnother_ChannelTask, TestSize.Level0)
+{
+    HTaskInfo info = CreateTaskInfo(false);
+    info->channelTask = true;
+    uv_loop_t loop;
+    uv_loop_init(&loop);
+    HdcChannelBase *channel = new HdcChannelBase(false, "127.0.0.1:8710", &loop);
+    info->channelClass = reinterpret_cast<void *>(channel);
+    {
+        HdcTaskBaseExpose task(info);
+        EXPECT_TRUE(task.SendToAnother(CMD_KERNEL_CHANNEL_CLOSE, nullptr, 0));
+    }
+    delete info;
+    delete channel;
+    uv_loop_close(&loop);
+}
+
+HWTEST_F(HdcTaskBaseTest, HdcTaskBase_ThreadCtrlCommunicate_SessionFound, TestSize.Level0)
+{
+    HTaskInfo info = CreateTaskInfo(false);
+    HdcSessionBase *sessionBase = new HdcSessionBase(false);
+    info->ownerSessionClass = sessionBase;
+    HSession hSession = new HdcSession();
+    hSession->sessionId = info->sessionId;
+    hSession->ctrlFd[STREAM_WORK] = -1;
+    sessionBase->AdminSession(OP_ADD, info->sessionId, hSession);
+    uint8_t buf = 0x5A;
+    int ret = -2;
+    {
+        HdcTaskBaseExpose task(info);
+        ret = task.ThreadCtrlCommunicate(&buf, 1);
+    }
+    EXPECT_LT(ret, 0);
+    sessionBase->AdminSession(OP_REMOVE, info->sessionId, nullptr);
+    delete hSession;
     delete info;
     delete sessionBase;
 }

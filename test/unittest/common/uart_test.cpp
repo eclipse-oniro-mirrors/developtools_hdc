@@ -888,7 +888,8 @@ HWTEST_F(HdcUARTBaseTest, HeadOperatorEqual, TestSize.Level1)
     UartHead headB(12345, PKG_OPTION_ACK, 100, 7);
     EXPECT_TRUE(headA == headB);
 
-    UartHead headC(54321, PKG_OPTION_ACK, 100, 7);
+    UartHead headC(12345, PKG_OPTION_ACK, 100, 7);
+    headC.flag[1] = 0x22;
     EXPECT_FALSE(headA == headC);
 
     UartHead headD(12345, PKG_OPTION_TAIL, 100, 7);
@@ -984,5 +985,40 @@ HWTEST_F(HdcUARTBaseTest, HeadValidateData, TestSize.Level1)
 
     buf[sizeof(UartHead) + 3] = 0xFF;
     EXPECT_FALSE(head->ValidateData());
+}
+
+/*
+ * @tc.name: HeadToDebugString
+ * @tc.desc: Check the ToDebugString of UartHead (dataSize==0 and !=0 branches),
+ *           and the dataSize==0 branch of UpdateCheckSum
+ * @tc.type: FUNC
+ */
+HWTEST_F(HdcUARTBaseTest, HeadToDebugString, TestSize.Level1)
+{
+    UartHead headZero;
+    headZero.sessionId = 12345;
+    headZero.UpdateCheckSum();
+    std::string debugZero = headZero.ToDebugString();
+    EXPECT_THAT(debugZero, HasSubstr("UartHead"));
+    EXPECT_THAT(debugZero, HasSubstr("sessionId"));
+    EXPECT_THAT(debugZero, HasSubstr("dataSize:0"));
+    EXPECT_THAT(debugZero, Not(HasSubstr("dataCheckSum")));
+    EXPECT_THAT(debugZero, HasSubstr("headCheckSum"));
+    EXPECT_TRUE(headZero.ValidateHead());
+
+    constexpr uint32_t dataSizeTest = 10;
+    uint8_t buf[sizeof(UartHead) + dataSizeTest] = { 0 };
+    UartHead *head = reinterpret_cast<UartHead *>(buf);
+    head->sessionId = 54321;
+    head->dataSize = dataSizeTest;
+    for (uint32_t i = 0; i < dataSizeTest; ++i) {
+        buf[sizeof(UartHead) + i] = static_cast<uint8_t>(i + 1);
+    }
+    head->UpdateCheckSum();
+    std::string debugData = head->ToDebugString();
+    EXPECT_THAT(debugData, HasSubstr("UartHead"));
+    EXPECT_THAT(debugData, HasSubstr("dataSize:10"));
+    EXPECT_THAT(debugData, HasSubstr("dataCheckSum"));
+    EXPECT_THAT(debugData, HasSubstr("headCheckSum"));
 }
 } // namespace Hdc

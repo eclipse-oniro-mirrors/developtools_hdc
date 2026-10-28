@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <fstream>
 
+#include "log.h"
 #include "base.h"
 #include "define.h"
 
@@ -1433,35 +1434,6 @@ HWTEST_F(BaseTest, CheckPathTraversal, TestSize.Level3) {
     EXPECT_FALSE(Base::CheckPathTraversal("../"));
 }
 
-HWTEST_F(BaseTest, TestParseLogLevel_Valid, TestSize.Level0) {
-    uint8_t logLevel = 0;
-    EXPECT_TRUE(Base::ParseLogLevel("0", logLevel));
-    EXPECT_EQ(logLevel, 0);
-    EXPECT_TRUE(Base::ParseLogLevel("1", logLevel));
-    EXPECT_EQ(logLevel, 1);
-    EXPECT_TRUE(Base::ParseLogLevel("6", logLevel));
-    EXPECT_EQ(logLevel, 6);
-}
-
-HWTEST_F(BaseTest, TestParseLogLevel_Invalid, TestSize.Level0) {
-    uint8_t logLevel = 0;
-    EXPECT_FALSE(Base::ParseLogLevel("7", logLevel));
-    EXPECT_FALSE(Base::ParseLogLevel("a", logLevel));
-    EXPECT_FALSE(Base::ParseLogLevel("", logLevel));
-    EXPECT_FALSE(Base::ParseLogLevel("12", logLevel));
-}
-
-HWTEST_F(BaseTest, TestGetLogLevelName, TestSize.Level0) {
-    EXPECT_STREQ(Base::GetLogLevelName(0), "off");
-    EXPECT_STREQ(Base::GetLogLevelName(1), "fatal");
-    EXPECT_STREQ(Base::GetLogLevelName(2), "warn");
-    EXPECT_STREQ(Base::GetLogLevelName(3), "info");
-    EXPECT_STREQ(Base::GetLogLevelName(4), "debug");
-    EXPECT_STREQ(Base::GetLogLevelName(5), "all");
-    EXPECT_STREQ(Base::GetLogLevelName(6), "verbose");
-    EXPECT_STREQ(Base::GetLogLevelName(7), "unknown");
-}
-
 HWTEST_F(BaseTest, TestTrim, TestSize.Level0) {
     std::string s1 = "  abc  ";
     Base::RightTrim(s1);
@@ -1631,10 +1603,6 @@ HWTEST_F(BaseTest, TestGetCwd, TestSize.Level0) {
     EXPECT_FALSE(Base::GetCwd().empty());
 }
 
-HWTEST_F(BaseTest, TestGetTmpDir, TestSize.Level0) {
-    EXPECT_FALSE(Base::GetTmpDir().empty());
-}
-
 HWTEST_F(BaseTest, TestGetRuntimeMSec, TestSize.Level0) {
     EXPECT_GT(Base::GetRuntimeMSec(), 0);
 }
@@ -1657,7 +1625,9 @@ HWTEST_F(BaseTest, TestBase64RoundTrip, TestSize.Level0) {
     vector<uint8_t> encoded =
         Base::Base64Encode(reinterpret_cast<const uint8_t *>(input), strlen(input));
     EXPECT_FALSE(encoded.empty());
-    string decoded = Base::Base64Decode(encoded.data(), encoded.size());
+    vector<uint8_t> encodedTerminated = encoded;
+    encodedTerminated.push_back(0);
+    string decoded = Base::Base64Decode(encodedTerminated.data(), encoded.size());
     EXPECT_EQ(decoded, "hello");
 }
 
@@ -1716,5 +1686,267 @@ HWTEST_F(BaseTest, TestWriteToFile, TestSize.Level0) {
     string filePath = Base::GetTmpDir() + "hdc_ut_write_file";
     EXPECT_TRUE(Base::WriteToFile(filePath, "content", std::ios::out));
     EXPECT_TRUE(Base::IsFileSizeLessThan(filePath, 100));
+}
+
+// 日志级别 set/get 往返，覆盖 SetLogLevel 与 GetLogLevel
+HWTEST_F(BaseTest, SetLogLevel_GetLogLevel_RoundTrip_001, TestSize.Level0) {
+    Base::SetLogLevel(0);
+    EXPECT_EQ(Base::GetLogLevel(), 0);
+    Base::SetLogLevel(6);
+    EXPECT_EQ(Base::GetLogLevel(), 6);
+    Base::SetLogLevel(4);  // 恢复默认 LOG_DEBUG
+    EXPECT_EQ(Base::GetLogLevel(), 4);
+}
+
+// 环境变量未设置时回退到当前日志级别
+HWTEST_F(BaseTest, GetLogLevelByEnv_Unset_001, TestSize.Level0) {
+    unsetenv(ENV_SERVER_LOG.c_str());
+    EXPECT_EQ(Base::GetLogLevelByEnv(), Base::GetLogLevel());
+}
+
+// 环境变量长度超过 1 时回退到当前日志级别
+HWTEST_F(BaseTest, GetLogLevelByEnv_TooLong_002, TestSize.Level0) {
+    setenv(ENV_SERVER_LOG.c_str(), "12", 1);
+    EXPECT_EQ(Base::GetLogLevelByEnv(), Base::GetLogLevel());
+    unsetenv(ENV_SERVER_LOG.c_str());
+}
+
+// 环境变量非数字时回退到当前日志级别
+HWTEST_F(BaseTest, GetLogLevelByEnv_NonDigit_002, TestSize.Level0) {
+    setenv(ENV_SERVER_LOG.c_str(), "a", 1);
+    EXPECT_EQ(Base::GetLogLevelByEnv(), Base::GetLogLevel());
+    unsetenv(ENV_SERVER_LOG.c_str());
+}
+
+// 合法日志级别 0~6 应被正确解析
+HWTEST_F(BaseTest, GetLogLevelByEnv_Valid_001, TestSize.Level0) {
+    setenv(ENV_SERVER_LOG.c_str(), "3", 1);
+    EXPECT_EQ(Base::GetLogLevelByEnv(), 3);
+    setenv(ENV_SERVER_LOG.c_str(), "6", 1);
+    EXPECT_EQ(Base::GetLogLevelByEnv(), 6);
+    setenv(ENV_SERVER_LOG.c_str(), "0", 1);
+    EXPECT_EQ(Base::GetLogLevelByEnv(), 0);
+    unsetenv(ENV_SERVER_LOG.c_str());
+}
+
+// 日志级别越界（7 > LOG_LAST）时回退到当前日志级别
+HWTEST_F(BaseTest, GetLogLevelByEnv_OutOfRange_003, TestSize.Level0) {
+    setenv(ENV_SERVER_LOG.c_str(), "7", 1);
+    EXPECT_EQ(Base::GetLogLevelByEnv(), Base::GetLogLevel());
+    unsetenv(ENV_SERVER_LOG.c_str());
+}
+
+// ReallocBuf 合法分配：分配成功且写入原始尺寸
+HWTEST_F(BaseTest, ReallocBuf_ValidAlloc_001, TestSize.Level0) {
+    uint8_t *buf = nullptr;
+    int size = 0;
+    Base::ReallocBuf(&buf, &size, 64);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(size, 64);
+    delete[] buf;
+}
+
+// ReallocBuf 已分配时直接返回，不改变原缓冲与尺寸
+HWTEST_F(BaseTest, ReallocBuf_AlreadyAlloc_001, TestSize.Level0) {
+    int size = 10;
+    uint8_t stackBuf[10] = { 0 };
+    uint8_t *buf = stackBuf;
+    Base::ReallocBuf(&buf, &size, 100);
+    EXPECT_EQ(size, 10);
+    EXPECT_EQ(buf, stackBuf);
+}
+
+// ReallocBuf 非法尺寸（0 与 >= HDC_BUF_MAX_BYTES）时不分配
+HWTEST_F(BaseTest, ReallocBuf_InvalidSize_002, TestSize.Level0) {
+    uint8_t *buf = nullptr;
+    int size = 0;
+    Base::ReallocBuf(&buf, &size, 0);
+    EXPECT_EQ(buf, nullptr);
+    EXPECT_EQ(size, 0);
+    Base::ReallocBuf(&buf, &size, HDC_BUF_MAX_BYTES);
+    EXPECT_EQ(buf, nullptr);
+    EXPECT_EQ(size, 0);
+}
+
+// GetTimeString 输出为固定格式：%Y%m%d-%H%M%S(15) + 3 位毫秒
+HWTEST_F(BaseTest, GetTimeString_001, TestSize.Level0) {
+    string timeStr;
+    Base::GetTimeString(timeStr);
+    ASSERT_FALSE(timeStr.empty());
+    EXPECT_EQ(timeStr.size(), 18u);
+}
+
+// 压缩日志文件名为原文件名追加 .tgz 后缀
+HWTEST_F(BaseTest, GetCompressLogFileName_001, TestSize.Level0) {
+    EXPECT_EQ(Base::GetCompressLogFileName("hdc-2023.log"), "hdc-2023.log.tgz");
+}
+
+// 带时间的日志名具有固定前缀与后缀
+HWTEST_F(BaseTest, GetLogNameWithTime_001, TestSize.Level0) {
+    string name = Base::GetLogNameWithTime();
+    ASSERT_GE(name.size(), 8u);
+    EXPECT_EQ(name.substr(0, 4), "hdc-");
+    EXPECT_EQ(name.substr(name.size() - 4), ".log");
+}
+
+// 非 FEATURE_HOST_LOG_COMPRESS 编译下，日志目录即临时目录
+HWTEST_F(BaseTest, GetLogDirName_001, TestSize.Level0) {
+    EXPECT_EQ(Base::GetLogDirName(), Base::GetTmpDir());
+}
+
+// 空文件列表无超限文件
+HWTEST_F(BaseTest, GetLogOverCount_Empty_001, TestSize.Level0) {
+    vector<string> empty;
+    EXPECT_EQ(Base::GetLogOverCount(empty, 0), 0u);
+}
+
+// 文件不存在时不计入超限数量
+HWTEST_F(BaseTest, GetLogOverCount_NotExist_002, TestSize.Level0) {
+    vector<string> files = { "hdc_ut_not_exist_001.log", "hdc_ut_not_exist_002.log" };
+    EXPECT_EQ(Base::GetLogOverCount(files, 1), 0u);
+}
+
+// 读取不存在的文件返回 -1
+HWTEST_F(BaseTest, ReadBinFile_NotExist_002, TestSize.Level0) {
+    void *buf = nullptr;
+    EXPECT_EQ(Base::ReadBinFile("/nonexistent_hdc_ut_bin", &buf, 0), -1);
+}
+
+// bufLen == 0 时动态分配并读回完整内容
+HWTEST_F(BaseTest, ReadBinFile_DynamicAlloc_001, TestSize.Level0) {
+    string path = Base::GetTmpDir() + "hdc_ut_read_dyn";
+    const uint8_t data[] = { 1, 2, 3, 4, 5 };
+    ASSERT_EQ(Base::WriteBinFile(path.c_str(), data, sizeof(data), true), RET_SUCCESS);
+    void *buf = nullptr;
+    int ret = Base::ReadBinFile(path.c_str(), &buf, 0);
+    EXPECT_EQ(ret, static_cast<int>(sizeof(data)));
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(memcmp(buf, data, sizeof(data)), 0);
+    delete[] static_cast<uint8_t *>(buf);
+    std::remove(path.c_str());
+}
+
+// 静态缓冲不足时返回 -2
+HWTEST_F(BaseTest, ReadBinFile_BufTooSmall_002, TestSize.Level0) {
+    string path = Base::GetTmpDir() + "hdc_ut_read_small";
+    const uint8_t data[] = { 1, 2, 3, 4, 5 };
+    ASSERT_EQ(Base::WriteBinFile(path.c_str(), data, sizeof(data), true), RET_SUCCESS);
+    uint8_t small[3] = { 0 };
+    EXPECT_EQ(Base::ReadBinFile(path.c_str(), reinterpret_cast<void **>(small), sizeof(small)), -2);
+    std::remove(path.c_str());
+}
+
+// 静态缓冲足够时读取完整内容
+HWTEST_F(BaseTest, ReadBinFile_StaticBuf_001, TestSize.Level0) {
+    string path = Base::GetTmpDir() + "hdc_ut_read_static";
+    const uint8_t data[] = { 9, 8, 7 };
+    ASSERT_EQ(Base::WriteBinFile(path.c_str(), data, sizeof(data), true), RET_SUCCESS);
+    uint8_t out[3] = { 0 };
+    int ret = Base::ReadBinFile(path.c_str(), reinterpret_cast<void **>(out), sizeof(out));
+    EXPECT_EQ(ret, static_cast<int>(sizeof(data)));
+    EXPECT_EQ(memcmp(out, data, sizeof(data)), 0);
+    std::remove(path.c_str());
+}
+
+// newFile 写文件成功并可读回校验
+HWTEST_F(BaseTest, WriteBinFile_NewFile_001, TestSize.Level0) {
+    string path = Base::GetTmpDir() + "hdc_ut_write_bin";
+    const uint8_t data[] = { 10, 20, 30 };
+    EXPECT_EQ(Base::WriteBinFile(path.c_str(), data, sizeof(data), true), RET_SUCCESS);
+    void *buf = nullptr;
+    EXPECT_EQ(Base::ReadBinFile(path.c_str(), &buf, 0), static_cast<int>(sizeof(data)));
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(memcmp(buf, data, sizeof(data)), 0);
+    delete[] static_cast<uint8_t *>(buf);
+    std::remove(path.c_str());
+}
+
+// newFile 且路径含 .. 时返回路径校验错误
+HWTEST_F(BaseTest, WriteBinFile_PathTraversal_002, TestSize.Level0) {
+    const uint8_t data[] = { 1 };
+    EXPECT_EQ(Base::WriteBinFile("../etc/passwd", data, sizeof(data), true), ERR_FILE_PATH_CHECK);
+}
+
+// Fopen 读写往返
+HWTEST_F(BaseTest, Fopen_ReadWrite_001, TestSize.Level0) {
+    string path = Base::GetTmpDir() + "hdc_ut_fopen";
+    FILE *f = Base::Fopen(path.c_str(), "w");
+    ASSERT_NE(f, nullptr);
+    fputs("hello", f);
+    fclose(f);
+
+    f = Base::Fopen(path.c_str(), "r");
+    ASSERT_NE(f, nullptr);
+    char buf[16] = { 0 };
+    ASSERT_NE(fgets(buf, sizeof(buf), f), nullptr);
+    EXPECT_STREQ(buf, "hello");
+    fclose(f);
+    std::remove(path.c_str());
+}
+
+// FopenNoFollow 空指针参数返回 nullptr
+HWTEST_F(BaseTest, FopenNoFollow_Null_002, TestSize.Level0) {
+    EXPECT_EQ(Base::FopenNoFollow(nullptr, "r"), nullptr);
+    EXPECT_EQ(Base::FopenNoFollow("/tmp/hdc_ut_nf", nullptr), nullptr);
+}
+
+// FopenNoFollow 空 mode 返回 nullptr
+HWTEST_F(BaseTest, FopenNoFollow_EmptyMode_002, TestSize.Level0) {
+    EXPECT_EQ(Base::FopenNoFollow("/tmp/hdc_ut_nf", ""), nullptr);
+}
+
+// FopenNoFollow 非法 mode 返回 nullptr
+HWTEST_F(BaseTest, FopenNoFollow_InvalidMode_002, TestSize.Level0) {
+    EXPECT_EQ(Base::FopenNoFollow("/tmp/hdc_ut_nf_nonexist", "x"), nullptr);
+}
+
+// FopenNoFollow 以只读方式打开已存在文件
+HWTEST_F(BaseTest, FopenNoFollow_Read_001, TestSize.Level0) {
+    string path = Base::GetTmpDir() + "hdc_ut_fopen_nf";
+    FILE *f = Base::Fopen(path.c_str(), "w");
+    ASSERT_NE(f, nullptr);
+    fputs("nfdata", f);
+    fclose(f);
+    FILE *r = Base::FopenNoFollow(path.c_str(), "r");
+    ASSERT_NE(r, nullptr);
+    char buf[16] = { 0 };
+    ASSERT_NE(fgets(buf, sizeof(buf), r), nullptr);
+    EXPECT_STREQ(buf, "nfdata");
+    fclose(r);
+    std::remove(path.c_str());
+}
+
+// CmdLogStringFormat 应包含会话 id 与命令内容并以换行结尾
+HWTEST_F(BaseTest, CmdLogStringFormat_001, TestSize.Level0) {
+    string out = Base::CmdLogStringFormat(12345u, "shell cmd");
+    EXPECT_NE(out.find("12345"), string::npos);
+    EXPECT_NE(out.find("shell cmd"), string::npos);
+    EXPECT_EQ(out.back(), '\n');
+}
+
+// UpdateEnvCache 会同步心跳开关缓存
+HWTEST_F(BaseTest, UpdateEnvCache_001, TestSize.Level0) {
+    setenv(ENV_SERVER_HEARTBEAT.c_str(), "1", 1);
+    Base::UpdateEnvCache();
+    EXPECT_FALSE(Base::GetheartbeatSwitch());
+    // 恢复默认：无环境变量时心跳开关应为 true
+    unsetenv(ENV_SERVER_HEARTBEAT.c_str());
+    Base::UpdateEnvCache();
+    EXPECT_TRUE(Base::GetheartbeatSwitch());
+}
+
+// 创建日志目录成功
+HWTEST_F(BaseTest, CreateLogDir_001, TestSize.Level0) {
+    EXPECT_TRUE(Base::CreateLogDir());
+}
+
+// 删除日志缓存文件后再次打开应失败
+HWTEST_F(BaseTest, RemoveLogCache_001, TestSize.Level0) {
+    string cachePath = Base::GetLogDirName() + LOG_CACHE_NAME;
+    FILE *f = Base::Fopen(cachePath.c_str(), "w");
+    ASSERT_NE(f, nullptr);
+    fclose(f);
+    Base::RemoveLogCache();
+    EXPECT_EQ(Base::Fopen(cachePath.c_str(), "r"), nullptr);
 }
 } // namespace Hdc
