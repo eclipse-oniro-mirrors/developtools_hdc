@@ -279,6 +279,7 @@ HWTEST_F(SessionBaseTest, SendByProtocol_DeadSession, TestSize.Level0) {
     hSession->isDead = true;
     uint8_t *buf = new uint8_t[4]();
     EXPECT_EQ(sessionBase->SendByProtocol(hSession, buf, 4), ERR_SESSION_NOFOUND);
+    delete[] buf;
     delete hSession;
 }
 
@@ -288,6 +289,7 @@ HWTEST_F(SessionBaseTest, SendByProtocol_NullModule, TestSize.Level0) {
     hSession->classModule = nullptr;
     uint8_t *buf = new uint8_t[4]();
     EXPECT_EQ(sessionBase->SendByProtocol(hSession, buf, 4), ERR_SESSION_NOFOUND);
+    delete[] buf;
     delete hSession;
 }
 
@@ -298,6 +300,7 @@ HWTEST_F(SessionBaseTest, SendByProtocol_DefaultConnType, TestSize.Level0) {
     hSession->classModule = reinterpret_cast<void *>(1);
     uint8_t *buf = new uint8_t[4]();
     EXPECT_EQ(sessionBase->SendByProtocol(hSession, buf, 4), ERR_GENERIC);
+    delete[] buf;
     delete hSession;
 }
 

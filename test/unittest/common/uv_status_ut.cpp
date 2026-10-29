@@ -106,8 +106,8 @@ HWTEST_F(HandleTest, HandleStart_NotMatchLoop_001, TestSize.Level0)
 {
     uv_loop_t loop2;
     ASSERT_EQ(uv_loop_init(&loop2), 0);
-    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HandleStart(&loop2, "NotMatch"));
-    ASSERT_FALSE(mLoopStatus->Busy());
+    EXPECT_NO_FATAL_FAILURE(mLoopStatus->HandleStart(&loop2, "NotMatch"));
+    EXPECT_FALSE(mLoopStatus->Busy());
     ASSERT_NO_FATAL_FAILURE(uv_loop_close(&loop2));
 }
 
@@ -133,8 +133,8 @@ HWTEST_F(HandleTest, HandleEnd_NotMatchLoop_001, TestSize.Level0)
     uv_loop_t loop2;
     ASSERT_EQ(uv_loop_init(&loop2), 0);
     mLoopStatus->HandleStart(&mLoop, "HandleEndTest");
-    ASSERT_NO_FATAL_FAILURE(mLoopStatus->HandleEnd(&loop2));
-    ASSERT_TRUE(mLoopStatus->Busy());
+    EXPECT_NO_FATAL_FAILURE(mLoopStatus->HandleEnd(&loop2));
+    EXPECT_TRUE(mLoopStatus->Busy());
     ASSERT_NO_FATAL_FAILURE(uv_loop_close(&loop2));
 }
 
