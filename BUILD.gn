@@ -53,6 +53,7 @@ hdc_common_sources = [
 
 hash_sources = [
   "scripts/hdc_hash_gen.py",
+  "scripts/file_path.cfg",
   "src/common/base.cpp",
   "src/common/channel.h",
   "src/common/session.h",
@@ -541,7 +542,7 @@ group("hdc_test_target") {
 action("hdc_hash_gen") {
   script = "scripts/hdc_hash_gen.py"
   sources = hash_sources
-  outputs = [ "$py_out_dir" ]
+  outputs = [ "$py_out_dir/hdc_hash_gen.h" ]
   args = [
     "-f",
     "hdc_hash_gen.h",
