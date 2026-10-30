@@ -124,7 +124,7 @@ std::string DaemonBaseTest::GetTestBundlePath(const std::string &bundleName)
 #endif
     if (id == -1) {
         id = DEFAULT_USER_ID;
-    }  
+    }
     basePath += std::to_string(id) + "/debug_hap/";
     return basePath + bundleName;
 }
