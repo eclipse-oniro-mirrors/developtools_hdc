@@ -23,7 +23,9 @@
 #include "base.h"
 #include "define_plus.h"
 #include "tlv.h"
+#ifndef HDC_NO_ACCOUNT
 #include "os_account_manager.h"
+#endif
 #include "shell_test.h"
 
 using namespace testing;
@@ -94,14 +96,16 @@ HWTEST_F(ShellTest, TestInitShell_WithValidBundle, TestSize.Level0)
 {
     std::string bundleName = "com.example.testapp";
     std::string basePath = DEBUG_BUNDLE_PATH;
+    int id = DEFAULT_USER_ID;
+#ifndef HDC_NO_ACCOUNT
     std::vector<int32_t> ids;
     OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
-    int id = -1;
     if (err != 0 || ids.empty()) {
         id = DEFAULT_USER_ID;
     } else {
         id = ids[0];
     }
+#endif
     basePath += std::to_string(id) + "/debug_hap/";
     
     mkdir(basePath.c_str(), 0755);
