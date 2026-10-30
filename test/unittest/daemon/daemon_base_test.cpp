@@ -112,14 +112,19 @@ void DaemonBaseTest::RemoveTestBundlePath(const std::string &bundleName)
 std::string DaemonBaseTest::GetTestBundlePath(const std::string &bundleName)
 {
     std::string basePath = DEBUG_BUNDLE_PATH;
+    int id = -1;
+#ifndef HDC_NO_ACCOUNT
     std::vector<int32_t> ids;
     OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
-    int id = -1;
     if (err != 0 || ids.empty()) {
         id = DEFAULT_USER_ID;
     } else {
         id = ids[0];
     }
+#endif
+    if (id == -1) {
+        id = DEFAULT_USER_ID;
+    }  
     basePath += std::to_string(id) + "/debug_hap/";
     return basePath + bundleName;
 }
