@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include "shell.h"
 #include "task.h"
+#include "daemon_base.h"
 #include "base.h"
 #include "define_plus.h"
 #include "tlv.h"

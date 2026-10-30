@@ -447,6 +447,7 @@ ohos_unittest("hdc_daemon_base_unittest") {
     "unittest/daemon/daemon_base_test.cpp",
     "unittest/daemon/daemon_usb_test.cpp",
     "unittest/daemon/jdwp_test.cpp",
+    "unittest/daemon/system_depend_test.cpp",
   ]
 
   configs = [
@@ -591,7 +592,9 @@ ohos_unittest("hdc_base_unittest") {
     "unittest/common/password_ut.cpp",
     "unittest/common/serial_struct_define_test.cpp",
     "unittest/common/server_cmd_log_ut.cpp",
+    "unittest/common/session_ut.cpp",
     "unittest/common/transfer_ut.cpp",
+    "unittest/common/task_ut.cpp",
     "unittest/common/tlv_ut.cpp",
     "unittest/common/uv_status_ut.cpp",
   ]
