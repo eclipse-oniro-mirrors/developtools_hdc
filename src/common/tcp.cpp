@@ -57,6 +57,10 @@ void HdcTCPBase::RecvUDP(uv_udp_t *handle, ssize_t nread, const uv_buf_t *rcvbuf
             char errBuf[BUF_SIZE_TINY] = {0};
             uv_strerror_r(static_cast<int>(nread), errBuf, sizeof(errBuf));
             WRITE_LOG(LOG_WARN, "RecvUDP failed nread:%zd err:%s", nread, errBuf);
+            // These errors are not recoverable by retrying, stop polling to avoid a busy loop.
+            if (nread == UV_EPERM || nread == UV_EACCES || nread == UV_ENOTSOCK) {
+                uv_udp_recv_stop(handle);
+            }
             break;
         }
         if (rcvbuf == nullptr) {
