@@ -483,6 +483,10 @@ void HdcServerForClient::SendCommandToClient(const HChannel hChannel, const uint
 bool HdcServerForClient::SendToDaemon(HChannel hChannel, const uint16_t commandFlag, uint8_t *bufPtr, const int bufSize)
 {
     StartTraceScope("HdcServerForClient::SendToDaemon");
+    if (bufSize < 0) {
+        WRITE_LOG(LOG_WARN, "SendToDaemon invalid bufSize:%d cid:%u", bufSize, hChannel->channelId);
+        return false;
+    }
     HDaemonInfo hdi = nullptr;
     bool ret = false;
     HdcServer *ptrServer = (HdcServer *)clsServer;
@@ -1620,6 +1624,25 @@ static bool ReportCommandEvent(uint8_t *bufPtr, const int bytesIO, bool isInterc
 }
 #endif
 
+// server directly passthrough file command to daemon
+bool HdcServerForClient::TrySendRemotePassthrough(HChannel hChannel, uint8_t *bufPtr, const int bytesIO)
+{
+    if (bytesIO < static_cast<int>(sizeof(uint16_t))) {
+        WRITE_LOG(LOG_WARN, "ReadChannel remote payload too short bytesIO:%d cid:%u", bytesIO,
+            hChannel->channelId);
+        return false;
+    }
+    uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
+    if (command != 0 && (hChannel->remote > RemoteType::REMOTE_NONE)) {
+        // server directly passthrough file command to daemon
+        if (!SendToDaemon(hChannel, command, bufPtr + sizeof(uint16_t), bytesIO - sizeof(uint16_t))) {
+            WRITE_LOG(LOG_FATAL, "Client ReadChannel : direct send to daemon failed");
+        }
+        return true;
+    }
+    return false;
+}
+
 // Here is Server to get data, the source is the SERVER's ChildWork to send data
 int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const int bytesIO)
 {
@@ -1648,11 +1671,7 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
         return ERR_GENERIC;
     }
     uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
-    if (command != 0 && (hChannel->remote > RemoteType::REMOTE_NONE)) {
-        // server directly passthrough file command to daemon
-        if (!SendToDaemon(hChannel, command, bufPtr + sizeof(uint16_t), bytesIO - sizeof(uint16_t))) {
-            WRITE_LOG(LOG_FATAL, "Client ReadChannel : direct send to daemon failed");
-        }
+    if (TrySendRemotePassthrough(hChannel, bufPtr, bytesIO)) {
         return 0;
     }
     struct TranslateCommand::FormatCommand formatCommand = {};

@@ -22,7 +22,9 @@
 #include <unistd.h>
 #include "daemon_base.h"
 #include "base.h"
+#ifndef HDC_NO_ACCOUNT
 #include "os_account_manager.h"
+#endif
 #include "daemon_base_test.h"
 
 using namespace testing;
@@ -60,14 +62,16 @@ bool DaemonBaseTest::CreateDir(const std::string &path)
 void DaemonBaseTest::CreateTestBundlePath(const std::string &bundleName)
 {
     std::string basePath = DEBUG_BUNDLE_PATH;
+    int id = DEFAULT_USER_ID;
+#ifndef HDC_NO_ACCOUNT
     std::vector<int32_t> ids;
     OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
-    int id = -1;
     if (err != 0 || ids.empty()) {
         id = DEFAULT_USER_ID;
     } else {
         id = ids[0];
     }
+#endif
     std::string userPath = basePath + std::to_string(id);
     if (!CreateDir(userPath)) {
         std::cout << "Create "<< userPath << " failed" << std::endl;
@@ -91,14 +95,16 @@ void DaemonBaseTest::RemoveTestBundlePath(const std::string &bundleName)
     rmdir(bundlePath.c_str());
     
     std::string basePath = DEBUG_BUNDLE_PATH;
+    int id = DEFAULT_USER_ID;
+#ifndef HDC_NO_ACCOUNT
     std::vector<int32_t> ids;
     OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
-    int id = -1;
     if (err != 0 || ids.empty()) {
         id = DEFAULT_USER_ID;
     } else {
         id = ids[0];
     }
+#endif
     basePath += std::to_string(id) + "/debug_hap/";
     rmdir(basePath.c_str());
 }
@@ -106,13 +112,18 @@ void DaemonBaseTest::RemoveTestBundlePath(const std::string &bundleName)
 std::string DaemonBaseTest::GetTestBundlePath(const std::string &bundleName)
 {
     std::string basePath = DEBUG_BUNDLE_PATH;
+    int id = -1;
+#ifndef HDC_NO_ACCOUNT
     std::vector<int32_t> ids;
     OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
-    int id = -1;
     if (err != 0 || ids.empty()) {
         id = DEFAULT_USER_ID;
     } else {
         id = ids[0];
+    }
+#endif
+    if (id == -1) {
+        id = DEFAULT_USER_ID;
     }
     basePath += std::to_string(id) + "/debug_hap/";
     return basePath + bundleName;
@@ -212,14 +223,16 @@ HWTEST_F(DaemonBaseTest, TestCheckBundlePath_ValidBundlePathFormat, TestSize.Lev
     EXPECT_TRUE(result);
     
     std::string expectedPath = DEBUG_BUNDLE_PATH;
+    int id = DEFAULT_USER_ID;
+#ifndef HDC_NO_ACCOUNT
     std::vector<int32_t> ids;
     OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
-    int id = -1;
     if (err != 0 || ids.empty()) {
         id = DEFAULT_USER_ID;
     } else {
         id = ids[0];
     }
+#endif
     expectedPath += std::to_string(id) + "/debug_hap/" + validBundleName;
     EXPECT_EQ(mountPath, expectedPath);
     

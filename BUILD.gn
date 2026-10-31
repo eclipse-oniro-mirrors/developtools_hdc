@@ -393,7 +393,8 @@ build_hdc("system") {
 build_hdc("updater") {
 }
 
-ohos_executable("hdc") {
+if (product_name == "ohos-sdk") {
+  ohos_executable("hdc") {
   use_exceptions = true
   ldflags = []
   libs = []
@@ -513,15 +514,18 @@ ohos_executable("hdc") {
 
   subsystem_name = "developtools"
   part_name = "hdc"
+  }
 }
 
 group("hdc_target") {
   deps = [
-    ":hdc",
     ":hdc_register",
     ":hdcd_system",
     ":hdcd_updater",
   ]
+  if (product_name == "ohos-sdk") {
+    deps += [ ":hdc" ]
+  }
 }
 
 group("hdc_target_all") {
