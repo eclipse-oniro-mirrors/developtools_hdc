@@ -14,12 +14,11 @@
  */
 #ifndef UPDATER_MODE
 #include "daemon_base.h"
-#include <vector>
+#include <dlfcn.h>
+#include <mutex>
 #include "base.h"
+#include "daemon_account.h"
 #include "define.h"
-#ifndef HDC_NO_ACCOUNT
-#include "os_account_manager.h"
-#endif
 
 namespace {
 static const int32_t DEFAULT_USER_ID = 100;
@@ -27,20 +26,82 @@ static const int32_t DEFAULT_USER_ID = 100;
 
 namespace Hdc {
 namespace HdcDaemonBase {
+#ifndef HDC_NO_ACCOUNT
+class AccountAdapterLoader {
+public:
+    static AccountAdapterLoader &GetInstance()
+    {
+        static AccountAdapterLoader *instance = nullptr;
+        static std::once_flag flag;
+        std::call_once(flag, []() { instance = new AccountAdapterLoader(); });
+        return *instance;
+    }
+
+    QueryActiveUserId GetQueryFunction() const
+    {
+        return queryActiveUserId_;
+    }
+
+private:
+    AccountAdapterLoader()
+    {
+        handle_ = dlopen(HDC_ACCOUNT_ADAPTER_LIB, RTLD_NOW | RTLD_LOCAL);
+        if (handle_ == nullptr) {
+            const char *error = dlerror();
+            WRITE_LOG(LOG_FATAL, "Load account adapter failed: %s", error == nullptr ? "unknown" : error);
+            return;
+        }
+
+        (void)dlerror();
+        queryActiveUserId_ = reinterpret_cast<QueryActiveUserId>(dlsym(handle_, HDC_QUERY_ACTIVE_USER_ID));
+        const char *error = dlerror();
+        if (queryActiveUserId_ == nullptr) {
+            WRITE_LOG(LOG_FATAL, "Load account adapter symbol failed: %s", error == nullptr ? "unknown" : error);
+            queryActiveUserId_ = nullptr;
+        } else if (error != nullptr) {
+            WRITE_LOG(LOG_WARN, "dlerror returned after successful dlsym: %s", error);
+        }
+    }
+
+    ~AccountAdapterLoader()
+    {
+        if (handle_ != nullptr) {
+            dlclose(handle_);
+            handle_ = nullptr;
+        }
+        queryActiveUserId_ = nullptr;
+    }
+
+    AccountAdapterLoader(const AccountAdapterLoader &) = delete;
+    AccountAdapterLoader &operator=(const AccountAdapterLoader &) = delete;
+
+    // Keep the adapter and its dependency closure loaded because the account client
+    // may retain callbacks and process-wide state after the query returns.
+    void *handle_ = nullptr;
+    QueryActiveUserId queryActiveUserId_ = nullptr;
+};
+#endif
+
 static int32_t GetUserId()
 {
 #ifndef HDC_NO_ACCOUNT
-    std::vector<int32_t> ids;
-    OHOS::ErrCode err = OHOS::AccountSA::OsAccountManager::QueryActiveOsAccountIds(ids);
+    QueryActiveUserId queryActiveUserId = AccountAdapterLoader::GetInstance().GetQueryFunction();
+    if (queryActiveUserId == nullptr) {
+        WRITE_LOG(LOG_FATAL, "Account adapter not loaded, query function is null");
+        return 0;
+    }
+
+    int32_t userId = 0;
+    int32_t err = queryActiveUserId(&userId);
     if (err != 0) {
-        WRITE_LOG(LOG_FATAL, "QueryActiveOsAccountIds failed, err: %d", err);
+        WRITE_LOG(LOG_FATAL, "Query active OS account failed, err: %d", err);
         return 0;
     }
-    if (ids.empty()) {
-        WRITE_LOG(LOG_FATAL, "QueryActiveOsAccountIds is empty");
+    if (userId <= 0) {
+        WRITE_LOG(LOG_FATAL, "Invalid active OS account id: %d", userId);
         return 0;
     }
-    return ids[0];
+    return userId;
 #else
     return 0;
 #endif
