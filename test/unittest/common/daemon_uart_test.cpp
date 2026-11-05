@@ -759,4 +759,76 @@ HWTEST_F(HdcDaemonUARTTest, Stop, TestSize.Level1)
     EXPECT_CALL(mockDaemonUART, CloseUartDevice).Times(1);
     mockDaemonUART.Stop();
 }
+
+// OnNewHandshakeOK：连续多个 sessionId 依次设置 currentSessionId
+HWTEST_F(HdcDaemonUARTTest, OnNewHandshakeOK_SequentialIds, TestSize.Level1)
+{
+    for (uint32_t id = 1; id <= 5; ++id) {
+        mockDaemonUART.OnNewHandshakeOK(id);
+        EXPECT_EQ(mockDaemonUART.currentSessionId, id);
+    }
+}
+
+// OnNewHandshakeOK：0 值 sessionId
+HWTEST_F(HdcDaemonUARTTest, OnNewHandshakeOK_ZeroId, TestSize.Level1)
+{
+    mockDaemonUART.OnNewHandshakeOK(0);
+    EXPECT_EQ(mockDaemonUART.currentSessionId, 0u);
+}
+
+// currentSessionId：fixture 初始为确定值 0
+HWTEST_F(HdcDaemonUARTTest, CurrentSessionId_InitialZero, TestSize.Level1)
+{
+    EXPECT_EQ(mockDaemonUART.currentSessionId, 0u);
+}
+
+// IsSendReady：null hSession / null hUART 分支（覆盖 !hSession || !hUART 短路左假）
+HWTEST_F(HdcDaemonUARTTest, IsSendReady_NullAndInvalid, TestSize.Level0)
+{
+    EXPECT_CALL(mockDaemonUART, IsSendReady)
+        .WillRepeatedly(Invoke([&](HSession hSession) {
+            return mockDaemonUART.HdcDaemonUART::IsSendReady(hSession);
+        }));
+
+    // null hSession → false（覆盖 !hSession 分支）
+    EXPECT_EQ(mockDaemonUART.IsSendReady(nullptr), false);
+
+    // null hUART → false（覆盖 !hSession->hUART 分支）
+    HdcSession mySession;
+    mySession.hUART = nullptr;
+    EXPECT_EQ(mockDaemonUART.IsSendReady(&mySession), false);
+}
+
+// PrepareBufForRead：调用后 dataReadBuf 被清空并预留容量（覆盖 clear + reserve 分支）
+HWTEST_F(HdcDaemonUARTTest, PrepareBufForRead_ClearsAndReserves, TestSize.Level0)
+{
+    EXPECT_CALL(mockDaemonUART, PrepareBufForRead)
+        .WillRepeatedly(Invoke([&]() {
+            return mockDaemonUART.HdcDaemonUART::PrepareBufForRead();
+        }));
+
+    // 预填充 dataReadBuf，调用后应被清空且预留 MAX_UART_SIZE_IOBUF
+    mockDaemonUART.dataReadBuf.assign(100, 0x55);
+    ASSERT_EQ(mockDaemonUART.dataReadBuf.size(), 100u);
+    EXPECT_EQ(mockDaemonUART.PrepareBufForRead(), RET_SUCCESS);
+    EXPECT_EQ(mockDaemonUART.dataReadBuf.size(), 0u);
+    EXPECT_GE(mockDaemonUART.dataReadBuf.capacity(), MAX_UART_SIZE_IOBUF);
+}
+
+// PackageProcess：空/短数据走真实实现（覆盖 while 不执行 + return 分支）
+HWTEST_F(HdcDaemonUARTTest, PackageProcess_ShortData, TestSize.Level0)
+{
+    EXPECT_CALL(mockDaemonUART, PackageProcess)
+        .WillRepeatedly(Invoke([&](vector<uint8_t> &data, HSession h) {
+            return mockDaemonUART.HdcUARTBase::PackageProcess(data, h);
+        }));
+
+    // 空数据 → while 不执行 → data.size() == 0 → return 0
+    std::vector<uint8_t> empty;
+    EXPECT_EQ(mockDaemonUART.PackageProcess(empty, nullptr), 0u);
+
+    // 单字节 → while 不执行 → data.size() == 1 → return 0
+    std::vector<uint8_t> one(1, 0x00);
+    EXPECT_EQ(mockDaemonUART.PackageProcess(one, nullptr), 0u);
+}
 } // namespace Hdc

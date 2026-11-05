@@ -624,4 +624,44 @@ HWTEST_F(HdcSSLTest, GetPskEncryptTest001, TestSize.Level0)
     delete hSession;
     delete hSSLInfo;
 }
+
+// GetSSLBufLen：正长度返回 >= 输入（含 SSL 头对齐开销）
+HWTEST_F(HdcSSLTest, GetSSLBufLen_Positive, TestSize.Level0)
+{
+    EXPECT_GE(HdcSSLBase::GetSSLBufLen(100), 100);
+}
+
+// GetSSLBufLen：0 长度返回非负
+HWTEST_F(HdcSSLTest, GetSSLBufLen_Zero, TestSize.Level0)
+{
+    EXPECT_GE(HdcSSLBase::GetSSLBufLen(0), 0);
+}
+
+// GetSSLBufLen：大长度对齐正确
+HWTEST_F(HdcSSLTest, GetSSLBufLen_Large, TestSize.Level0)
+{
+    int large = 64 * 1024;
+    EXPECT_GE(HdcSSLBase::GetSSLBufLen(large), large);
+}
+
+// GetSSLBufLen：恰好块大小倍数
+HWTEST_F(HdcSSLTest, GetSSLBufLen_BlockMultiple, TestSize.Level0)
+{
+    EXPECT_GE(HdcSSLBase::GetSSLBufLen(BUF_SIZE_DEFAULT16), BUF_SIZE_DEFAULT16);
+}
+
+// RsaPrikeyDecrypt：空入参 → 返回 <=0（覆盖非法输入分支）
+HWTEST_F(HdcSSLTest, RsaPrikeyDecrypt_NullInput_ReturnsError, TestSize.Level0)
+{
+    unsigned char out[16] = {0};
+    EXPECT_LE(HdcSSLBase::RsaPrikeyDecrypt(nullptr, 0, out, sizeof(out)), 0);
+}
+
+// RsaPrikeyDecrypt：输出缓冲不足 → 返回 <=0
+HWTEST_F(HdcSSLTest, RsaPrikeyDecrypt_SmallOutBuf_ReturnsError, TestSize.Level0)
+{
+    unsigned char in[8] = {0};
+    unsigned char out[1] = {0};
+    EXPECT_LE(HdcSSLBase::RsaPrikeyDecrypt(in, sizeof(in), out, sizeof(out)), 0);
+}
 } // namespace Hdc

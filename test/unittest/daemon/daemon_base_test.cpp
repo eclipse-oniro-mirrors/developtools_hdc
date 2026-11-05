@@ -31,8 +31,8 @@ using namespace testing;
 using namespace testing::ext;
 
 namespace {
-static const int32_t DEFAULT_USER_ID = 100;
 const mode_t FILE_MODE = 0755;
+static const int32_t DEFAULT_USER_ID = 100;
 }
 
 namespace Hdc {

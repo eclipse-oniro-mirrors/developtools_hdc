@@ -494,7 +494,7 @@ HWTEST_F(HdcCredentialMessageTest, TestSetMessageBody_CharPtr_ExceedMaxLen, Test
 {
     CredentialMessage message("");
     char data[MESSAGE_STR_MAX_LEN + 2] = {0};
-    memset_s(data, sizeof(data), 'a', MESSAGE_STR_MAX_LEN + 1);
+    memset(data, 'a', MESSAGE_STR_MAX_LEN + 1);
     message.SetMessageBody(data, MESSAGE_STR_MAX_LEN + 1);
     AssertBodyEmpty(message);
     EXPECT_EQ(message.GetMessageBodyLen(), 0);

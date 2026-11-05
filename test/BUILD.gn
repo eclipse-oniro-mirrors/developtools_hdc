@@ -95,6 +95,13 @@ config("hdc_ut_code_flag") {
   cflags = code_check_flag
 }
 
+config("hdc_daemon_ut_suppress_warnings") {
+  cflags = [
+    "-Wno-missing-field-initializers",
+    "-Wno-unused-function",
+  ]
+}
+
 config("hdc_ut_config") {
   defines = [
     "TEST_HASH",
@@ -374,10 +381,10 @@ ohos_unittest("hdc_host_base_unittest") {
     "${hdc_path}/src/host/host_unity.cpp",
     "${hdc_path}/src/host/host_updater.cpp",
     "${hdc_path}/src/host/host_shell_option.cpp",
-    "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/translate.cpp",
     "${hdc_path}/src/common/server_cmd_log.cpp",
     "${hdc_path}/src/common/uart.cpp",
+    "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util_unix.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util_win.cpp",
@@ -429,7 +436,8 @@ ohos_unittest("hdc_daemon_base_unittest") {
   module_out_path = module_output_path
   resource_config_file = "unittest/resource/ohos_test.xml"
   defines = [
-    "MEMORY_POOL_ENABLE"
+    "MEMORY_POOL_ENABLE",
+    "UNIT_TEST",
   ]
   if (is_ohos) {
     defines += [ "HDC_UNIT_TEST" ]
@@ -451,18 +459,36 @@ ohos_unittest("hdc_daemon_base_unittest") {
     "unittest/daemon/daemon_usb_test.cpp",
     "unittest/daemon/jdwp_test.cpp",
     "unittest/daemon/system_depend_test.cpp",
+    "unittest/daemon/system_depend_ut.cpp",
+    "unittest/daemon/daemon_forward_ut.cpp",
+    "${hdc_path}/src/daemon/daemon.cpp",
+    "${hdc_path}/src/daemon/main.cpp",
+    "${hdc_path}/src/daemon/daemon_unity.cpp",
+    "${hdc_path}/src/daemon/daemon_tcp.cpp",
+    "${hdc_path}/src/daemon/daemon_bridge.cpp",
+    "${hdc_path}/src/daemon/daemon_ssl.cpp",
+    "${hdc_path}/src/daemon/shell.cpp",
+    "${hdc_path}/src/daemon/daemon_uart.cpp",
+    "unittest/daemon/daemon_ut.cpp",
+    "unittest/daemon/main_ut.cpp",
+    "unittest/daemon/daemon_unity_ut.cpp",
+    "unittest/daemon/daemon_tcp_ut.cpp",
+    "unittest/daemon/daemon_bridge_ut.cpp",
+    "unittest/daemon/daemon_ssl_ut.cpp",
   ]
 
   configs = [
     ":hdc_daemon_common_config",
     ":hdc_ut_code_flag",
     ":hdc_ut_config",
+    ":hdc_daemon_ut_suppress_warnings",
   ]
 
   external_deps = common_external_deps
   external_deps += [
     "googletest:gmock_main",
     "libusb:libusb",
+    "c_utils:utils",
   ]
 
   if (product_name != "ohos-sdk" && support_jsapi) {
@@ -600,6 +626,18 @@ ohos_unittest("hdc_base_unittest") {
     "unittest/common/task_ut.cpp",
     "unittest/common/tlv_ut.cpp",
     "unittest/common/uv_status_ut.cpp",
+    "unittest/common/circle_buffer_ut.cpp",
+    "unittest/common/memory_pool_ut.cpp",
+    "unittest/common/entry_ut.cpp",
+    "unittest/common/decompress_ut.cpp",
+    "unittest/common/compress_ut.cpp",
+    "unittest/common/async_cmd_ut.cpp",
+    "unittest/common/connect_validation_ut.cpp",
+    "unittest/common/channel_ut.cpp",
+    "unittest/common/tcp_ut.cpp",
+    "unittest/common/usb_ut.cpp",
+    "unittest/common/file_descriptor_ut.cpp",
+    "unittest/common/auth_ut.cpp",
   ]
 
   configs = [

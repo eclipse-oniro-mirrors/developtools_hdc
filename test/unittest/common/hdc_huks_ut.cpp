@@ -433,4 +433,131 @@ HWTEST_F(HdcHuksTest, TestAesGcmEncryptDecryptConsistency, TestSize.Level0)
     }
 }
 
+// CaculateGcmEncryptLen：正长度返回大于输入（含 nonce/tag 开销）
+HWTEST_F(HdcHuksTest, TestCaculateGcmEncryptLen_Positive, TestSize.Level0)
+{
+    EXPECT_GT(HdcHuks::CaculateGcmEncryptLen(100), 100);
+}
+
+// CaculateGcmEncryptLen：0 长度返回非负
+HWTEST_F(HdcHuksTest, TestCaculateGcmEncryptLen_Zero, TestSize.Level0)
+{
+    EXPECT_GE(HdcHuks::CaculateGcmEncryptLen(0), 0);
+}
+
+// CaculateGcmEncryptLen：大长度不溢出
+HWTEST_F(HdcHuksTest, TestCaculateGcmEncryptLen_Large, TestSize.Level0)
+{
+    EXPECT_GT(HdcHuks::CaculateGcmEncryptLen(4096), 4096);
+}
+
+// AesGcmEncrypt：大块数据加解密往返一致
+HWTEST_F(HdcHuksTest, TestAesGcmEncrypt_LargeDataRoundtrip, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    ASSERT_TRUE(huks.ResetHuksKey());
+    std::vector<uint8_t> data(1000, 'Z');
+    std::vector<uint8_t> enc;
+    ASSERT_TRUE(huks.AesGcmEncrypt(data.data(), data.size(), enc));
+    auto plain = huks.AesGcmDecrypt(enc.data(), enc.size());
+    ASSERT_EQ(plain.second, static_cast<int>(data.size()));
+    ASSERT_EQ(memcmp(plain.first, data.data(), data.size()), 0);
+    if (plain.first != nullptr) {
+        delete[] plain.first;
+    }
+}
+
+// AesGcmDecrypt：空输入 → 返回空/0（覆盖非法输入分支）
+HWTEST_F(HdcHuksTest, TestAesGcmDecrypt_EmptyInput, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    auto plain = huks.AesGcmDecrypt(nullptr, 0);
+    EXPECT_TRUE(plain.first == nullptr || plain.second <= 0);
+    if (plain.first != nullptr) {
+        delete[] plain.first;
+    }
+}
+
+// ResetHuksKey：连续两次重置均成功
+HWTEST_F(HdcHuksTest, TestResetHuksKey_Twice, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    ASSERT_TRUE(huks.ResetHuksKey());
+    ASSERT_TRUE(huks.ResetHuksKey());
+}
+
+// GetUserId：返回非负（覆盖查询分支）
+HWTEST_F(HdcHuksTest, TestGetUserId_NonNegative, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    EXPECT_GE(huks.GetUserId(), 0);
+}
+
+// GenerateAndExportHuksRSAPublicKey：重复导出仍成功（覆盖已存在 key 分支）
+HWTEST_F(HdcHuksTest, TestGenerateAndExportHuksRSAPublicKey_Twice, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    ASSERT_TRUE(huks.ResetHuksKey());
+    ASSERT_EQ(huks.GenerateAndExportHuksRSAPublicKey(), 0);
+    ASSERT_EQ(huks.GenerateAndExportHuksRSAPublicKey(), 0);
+}
+
+// AesGcmEncryptDecrypt：长度 1 边界往返
+HWTEST_F(HdcHuksTest, TestAesGcmEncryptDecrypt_Len1, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    ASSERT_TRUE(huks.ResetHuksKey());
+    std::vector<uint8_t> data(1, 'X');
+    std::vector<uint8_t> enc;
+    ASSERT_TRUE(huks.AesGcmEncrypt(data.data(), 1, enc));
+    auto plain = huks.AesGcmDecrypt(enc.data(), enc.size());
+    ASSERT_EQ(plain.second, 1);
+    if (plain.first != nullptr) {
+        delete[] plain.first;
+    }
+}
+
+// AesGcmEncryptDecrypt：16/64/256 字节对齐边界往返一致（覆盖典型块长度边界）
+HWTEST_F(HdcHuksTest, TestAesGcmEncryptDecrypt_BoundaryLengths, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    ASSERT_TRUE(huks.ResetHuksKey());
+    const int lengths[] = {16, 64, 256};
+    for (int len : lengths) {
+        std::vector<uint8_t> data(len, 'B');
+        std::vector<uint8_t> enc;
+        ASSERT_TRUE(huks.AesGcmEncrypt(data.data(), len, enc));
+        // 加密后长度 = nonce(12) + plain + tag(16)
+        ASSERT_EQ(static_cast<int>(enc.size()), huks.CaculateGcmEncryptLen(len));
+        auto plain = huks.AesGcmDecrypt(enc.data(), enc.size());
+        ASSERT_EQ(plain.second, len);
+        ASSERT_EQ(memcmp(plain.first, data.data(), len), 0);
+        if (plain.first != nullptr) {
+            memset_s(plain.first, plain.second, 0, plain.second);
+            delete[] plain.first;
+        }
+    }
+}
+
+// AesGcmDecrypt：inputLen == nonce(12) 边界 → 返回空（覆盖 inputLen <= NONCE 分支边界值）
+HWTEST_F(HdcHuksTest, TestAesGcmDecrypt_InputLenEqualsNonce, TestSize.Level0)
+{
+    HdcHuks huks(TEST_HUKS_ALIAS);
+    std::vector<uint8_t> data(12, 0x41); // 恰好等于 AES_GCM_NONCE_BYTE_LEN
+    auto plain = huks.AesGcmDecrypt(data.data(), data.size());
+    EXPECT_EQ(plain.first, nullptr);
+    EXPECT_EQ(plain.second, 0);
+    if (plain.first != nullptr) {
+        delete[] plain.first;
+    }
+}
+
+// CaculateGcmEncryptLen：负数入参边界（纯算术，不崩溃，覆盖负值返回路径）
+HWTEST_F(HdcHuksTest, TestCaculateGcmEncryptLen_Negative, TestSize.Level0)
+{
+    EXPECT_EQ(HdcHuks::CaculateGcmEncryptLen(-1), 27);   // -1 + 12 + 16
+    EXPECT_EQ(HdcHuks::CaculateGcmEncryptLen(-28), 0);   // -28 + 28 = 0
+    EXPECT_LT(HdcHuks::CaculateGcmEncryptLen(-29), 0);   // -29 + 28 = -1
+}
+
 } // namespace Hdc

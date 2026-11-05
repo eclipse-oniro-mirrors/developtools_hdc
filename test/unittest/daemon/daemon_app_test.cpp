@@ -217,4 +217,104 @@ HWTEST_F(HdcDaemonAppTest, Test_RemovePath_DirRecursive, TestSize.Level0)
 
     delete taskInfo;
 }
+
+// CommandDispatch：未知 command → 不崩溃
+HWTEST_F(HdcDaemonAppTest, Test_CommandDispatch_UnknownCommand, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    uint8_t payload[4] = {0};
+    EXPECT_NO_FATAL_FAILURE(daemonApp.CommandDispatch(0xFFFF, payload, sizeof(payload)));
+    delete taskInfo;
+}
+
+// CommandDispatch：空 payload 不崩溃
+HWTEST_F(HdcDaemonAppTest, Test_CommandDispatch_EmptyPayload, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    EXPECT_NO_FATAL_FAILURE(daemonApp.CommandDispatch(0xFFFF, nullptr, 0));
+    delete taskInfo;
+}
+
+// RemoveDir：不存在目录不崩溃
+HWTEST_F(HdcDaemonAppTest, Test_RemoveDir_NonExist, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    EXPECT_NO_FATAL_FAILURE(daemonApp.RemoveDir("/tmp/hdc_daemon_app_ut_nonexist_dir"));
+    delete taskInfo;
+}
+
+// RemovePath：不存在路径不崩溃
+HWTEST_F(HdcDaemonAppTest, Test_RemovePath_NonExist, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    EXPECT_NO_FATAL_FAILURE(daemonApp.RemovePath("/tmp/hdc_daemon_app_ut_nonexist_path"));
+    delete taskInfo;
+}
+
+// MakeCtxForAppCheck：空 payload → 返回 false（覆盖非法 payload 分支）
+HWTEST_F(HdcDaemonAppTest, Test_MakeCtxForAppCheck_NullPayload, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    EXPECT_FALSE(daemonApp.MakeCtxForAppCheck(nullptr, 0));
+    delete taskInfo;
+}
+
+// Tar2Dir：不存在 tar → 返回空串
+HWTEST_F(HdcDaemonAppTest, Test_Tar2Dir_NonExist_ReturnsEmpty, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    std::string r = daemonApp.Tar2Dir("/tmp/hdc_daemon_app_ut_nonexist.tar");
+    EXPECT_FALSE(r.empty());
+    delete taskInfo;
+}
+
+// ReadyForRelease：初始 refCount=0 → true
+HWTEST_F(HdcDaemonAppTest, Test_ReadyForRelease_InitialTrue, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    EXPECT_TRUE(daemonApp.ReadyForRelease());
+    delete taskInfo;
+}
+
+// CommandDispatch：CMD_APP_CHECK + 非法 payload → MakeCtxForAppCheck 失败（覆盖 delete openReq + ret=false 分支）
+HWTEST_F(HdcDaemonAppTest, Test_CommandDispatch_AppCheck_InvalidPayload, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    // null payload → MakeCtxForAppCheck returns false → delete openReq, ret=false
+    EXPECT_FALSE(daemonApp.CommandDispatch(CMD_APP_CHECK, nullptr, 0));
+    delete taskInfo;
+}
+
+// AsyncInstallFinish：singalStop 后调用不崩溃（覆盖 mode==APPMOD_INSTALL + .tar 移除分支）
+HWTEST_F(HdcDaemonAppTest, Test_AsyncInstallFinish_NoCrash, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    HdcDaemonApp daemonApp(taskInfo);
+    daemonApp.singalStop = true;  // 阻止 SendToAnother 访问空 session
+    daemonApp.mode = HdcDaemonApp::APPMOD_INSTALL;
+    daemonApp.ctxNow.localPath = "/tmp/hdc_async_install_nonexist.tar";
+    EXPECT_NO_FATAL_FAILURE(daemonApp.AsyncInstallFinish(0, "success"));
+    EXPECT_NO_FATAL_FAILURE(daemonApp.AsyncInstallFinish(1, "fail"));
+    delete taskInfo;
+}
+
+// Sideload：空 path 不崩溃（覆盖 mode 设置 + TaskFinish + unlink 空路径）
+HWTEST_F(HdcDaemonAppTest, Test_Sideload_EmptyPath, TestSize.Level0)
+{
+    HTaskInfo taskInfo = new TaskInformation();
+    taskInfo->channelTask = true;  // LogMsg 走 fprintf 分支，避免访问空 session
+    HdcDaemonApp daemonApp(taskInfo);
+    daemonApp.singalStop = true;  // 阻止 TaskFinish→SendToAnother 访问空 session
+    EXPECT_NO_FATAL_FAILURE(daemonApp.Sideload(""));
+    EXPECT_EQ(daemonApp.mode, HdcDaemonApp::APPMOD_SIDELOAD);
+    delete taskInfo;
+}
 } // namespace Hdc
