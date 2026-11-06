@@ -54,10 +54,6 @@ hdc_common_sources = [
 hash_sources = [
   "scripts/file_path.cfg",
   "scripts/hdc_hash_gen.py",
-  "src/common/base.cpp",
-  "src/common/channel.h",
-  "src/common/session.h",
-  "src/common/transfer.h",
 ]
 
 if (hdc_support_uart) {
@@ -570,6 +566,7 @@ action("hdc_hash_gen") {
   script = "scripts/hdc_hash_gen.py"
   sources = hash_sources
   outputs = [ "$py_out_dir/hdc_hash_gen.h" ]
+  depfile = "$target_gen_dir/hdc_hash_gen.d"
   args = [
     "-f",
     "hdc_hash_gen.h",
@@ -577,6 +574,10 @@ action("hdc_hash_gen") {
     rebase_path(".", root_build_dir),
     "-o",
     rebase_path("$py_out_dir" + "/", root_build_dir),
+    "--depfile",
+    rebase_path(depfile, root_build_dir),
+    "--dep-target",
+    rebase_path(outputs[0], root_build_dir),
   ]
   public_configs = [ ":hdc_config" ]
 }

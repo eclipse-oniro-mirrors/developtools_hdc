@@ -17,6 +17,7 @@ import os
 import sys
 import argparse
 import hashlib
+import tempfile
 
 ALGORITHM = None
 HDC_FILE = ""
@@ -25,6 +26,34 @@ OUTPUT_DIR = ""
 struct_vals = []
 CFG_FILE_NAME = r"scripts/file_path.cfg"
 OUTPUT_FILE_NAME = r"all.txt"
+DEPFILE = None
+DEP_TARGET = None
+DEPENDENCIES = set()
+
+
+def write_depfile():
+    if not DEPFILE:
+        return
+
+    def escape(value):
+        if '\n' in value or '\r' in value:
+            raise ValueError('A dependency path contains a newline')
+        return (value.replace('\\', '\\\\').replace('$', '$$')
+                .replace(' ', '\\ ').replace('\t', '\\\t')
+                .replace('#', '\\#').replace(':', '\\:'))
+
+    inputs = sorted(os.path.relpath(path) for path in DEPENDENCIES)
+    content = escape(DEP_TARGET) + ': ' + ' '.join(escape(path) for path in inputs) + '\n'
+    parent = os.path.dirname(os.path.abspath(DEPFILE))
+    os.makedirs(parent, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(dir=parent, prefix='.hdc-deps-')
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            stream.write(content)
+        os.replace(temporary, DEPFILE)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def calc_file_hash():
@@ -68,10 +97,14 @@ def write_hdc_file():
 def read_struct():
     if INPUT_DIR == "":
         return
-    with open("{}/{}".format(INPUT_DIR, CFG_FILE_NAME), mode='r', encoding='utf-8') as fd_path:
+    config = "{}/{}".format(INPUT_DIR, CFG_FILE_NAME)
+    DEPENDENCIES.update((os.path.abspath(__file__), os.path.abspath(config)))
+    with open(config, mode='r', encoding='utf-8') as fd_path:
         for line in fd_path.readlines():
             file_name = line.strip()
-            with open("{}{}".format(INPUT_DIR, file_name), mode='r', encoding='utf-8') as fd_file:
+            source = "{}{}".format(INPUT_DIR, file_name)
+            DEPENDENCIES.add(os.path.abspath(source))
+            with open(source, mode='r', encoding='utf-8') as fd_file:
                 is_find = False
                 is_end = False
                 begin_count = 0
@@ -105,8 +138,14 @@ def main():
                         help='input directory')
     parser.add_argument('-o', dest='OUTPUT_DIR', required=True, type=str,
                         help='output directory')
+    parser.add_argument('--depfile')
+    parser.add_argument('--dep-target', help='first GN output relative to the Ninja build directory')
 
     args = parser.parse_args(sys.argv[1:])
+    if bool(args.depfile) != bool(args.dep_target):
+        parser.error('--depfile and --dep-target must be used together')
+    global DEPFILE, DEP_TARGET
+    DEPFILE, DEP_TARGET = args.depfile, args.dep_target
     global HDC_FILE
     HDC_FILE = args.HDC_FILE
     print("HDC_FILE:", HDC_FILE)
@@ -125,3 +164,4 @@ if __name__ == '__main__':
     write_output_file()
     calc_file_hash()
     write_hdc_file()
+    write_depfile()
