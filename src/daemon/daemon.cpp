@@ -14,6 +14,7 @@
  */
 #include "daemon.h"
 #include "connect_validation.h"
+#include "extra_auth.h"
 #ifndef TEST_HASH
 #include "hdc_hash_gen.h"
 #endif
@@ -854,6 +855,90 @@ bool HdcDaemon::HandDaemonAuthBypass(void)
     return Base::Trim(authbypass) == "1";
 }
 
+bool HdcDaemon::IsExtraAuthEnabled()
+{
+    string authControl;
+    SystemDepend::GetDevItem("persist.hdc.control.auth", authControl);
+    return Base::Trim(authControl) == "1";
+}
+
+bool HdcDaemon::StartExtraAuth(HSession hSession, const uint32_t channelId, SessionHandShake &handshake)
+{
+    string payload;
+    if (!HdcExtraAuth::GetRpm(payload)) {
+        WRITE_LOG(LOG_FATAL, "get rpm failed for session %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return false;
+    }
+
+    hSession->extraAuthRequired = true;
+    hSession->extraAuthPassed = false;
+    hSession->extraAuthFailed = false;
+    hSession->extraAuthChallengeTime = Base::GetRuntimeMSec();
+    handshake.authType = AUTH_FAIL;
+    handshake.buf = payload;
+    string bufString = SerialStruct::SerializeToString(handshake);
+    int ret = Send(hSession->sessionId, channelId, CMD_KERNEL_HANDSHAKE,
+        reinterpret_cast<uint8_t *>(const_cast<char *>(bufString.c_str())), bufString.size());
+    if (ret <= 0) {
+        hSession->extraAuthRequired = false;
+        hSession->extraAuthChallengeTime = 0;
+        WRITE_LOG(LOG_WARN, "send extra auth rpm failed for session %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return false;
+    }
+    WRITE_LOG(LOG_INFO, "extra auth rpm sent for session %s",
+        Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+    return true;
+}
+
+bool HdcDaemon::VerifyExtraAuth(HSession hSession, const string &response)
+{
+    if (!hSession->extraAuthRequired || response.empty() ||
+        response.size() > HdcExtraAuth::MAX_PDA_LENGTH ||
+        Base::GetRuntimeMSec() - hSession->extraAuthChallengeTime > HdcExtraAuth::CHALLENGE_TIMEOUT_MS) {
+        return false;
+    }
+    // response is the raw PDA bytes (host sent them without TLV framing).
+    // Store via DHA StorePda, then verify via DHA VerifyPda.
+    if (!HdcExtraAuth::StoreAndVerifyPda(response)) {
+        WRITE_LOG(LOG_WARN, "PDA store/verify failed for session %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return false;
+    }
+    WRITE_LOG(LOG_INFO, "PDA verified for session %s",
+        Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+    return true;
+}
+
+void HdcDaemon::RejectExtraAuth(HSession hSession, const uint32_t channelId, SessionHandShake &handshake)
+{
+    hSession->extraAuthRequired = false;
+    hSession->extraAuthPassed = false;
+    hSession->extraAuthFailed = true;
+    hSession->extraAuthChallengeTime = 0;
+    hSession->handshakeOK = false;
+    handshake.authType = AUTH_FAIL;
+    handshake.buf = "";
+    string bufString = SerialStruct::SerializeToString(handshake);
+    Send(hSession->sessionId, channelId, CMD_KERNEL_HANDSHAKE,
+        reinterpret_cast<uint8_t *>(const_cast<char *>(bufString.c_str())), bufString.size());
+    uint8_t count = 1;
+    Send(hSession->sessionId, channelId, CMD_KERNEL_CHANNEL_CLOSE, &count, 1);
+}
+
+void HdcDaemon::RejectUnsupportedClient(SessionHandShake &handshake, uint32_t channelId, HSession hSession)
+{
+    hSession->extraAuthRequired = false;
+    hSession->extraAuthPassed = false;
+    hSession->extraAuthFailed = true;
+    hSession->extraAuthChallengeTime = 0;
+    hSession->handshakeOK = false;
+    WRITE_LOG(LOG_FATAL, "hdc client version %s does not support additional authentication, please upgrade to %s",
+        handshake.version.c_str(), HdcExtraAuth::MIN_CLIENT_VERSION);
+    HandleAuthFailed(handshake, channelId, hSession, HdcExtraAuth::UNSUPPORTED_CLIENT_MESSAGE);
+}
+
 bool HdcDaemon::ShouldSkipAuthBypassForEncrypt(HSession hSession)
 {
 #ifdef HDC_SUPPORT_ENCRYPT_TCP
@@ -959,6 +1044,10 @@ void HdcDaemon::DaemonSessionHandshakeInit(HSession &hSession, SessionHandShake 
     hSession->sessionId = handshake.sessionId;
     hSession->connectKey = handshake.connectKey;
     hSession->handshakeOK = false;
+    hSession->extraAuthRequired = false;
+    hSession->extraAuthPassed = false;
+    hSession->extraAuthFailed = false;
+    hSession->extraAuthChallengeTime = 0;
     AdminSession(OP_UPDATE, unOld, hSession);
 #ifdef HDC_SUPPORT_UART
     if (hSession->connType == CONN_SERIAL and clsUARTServ!= nullptr) {
@@ -1030,39 +1119,54 @@ bool HdcDaemon::DaemonSSLHandshake(HSession hSession, const uint32_t channelId, 
 }
 #endif
 
-bool HdcDaemon::DaemonSessionHandshake(HSession hSession, const uint32_t channelId, uint8_t *payload, int payloadSize)
+bool HdcDaemon::ParseDaemonHandshake(HSession hSession, uint8_t *payload, int payloadSize,
+                                     SessionHandShake &handshake, std::string &sessionIdMaskStr)
 {
-    StartTraceScope("HdcDaemon::DaemonSessionHandshake");
-    // session handshake step2
     string s = string(reinterpret_cast<char *>(payload), payloadSize);
-    SessionHandShake handshake;
-    std::string sessionIdMaskStr = Hdc::MaskSessionIdToString(hSession->sessionId);
+    sessionIdMaskStr = Hdc::MaskSessionIdToString(hSession->sessionId);
     SerialStruct::ParseFromString(handshake, s);
 #ifdef HDC_DEBUG
     WRITE_LOG(LOG_DEBUG, "session %s try to handshake", hSession->ToDebugString().c_str());
 #endif
-    // banner to check is parse ok...
     if (handshake.banner != HANDSHAKE_MESSAGE) {
         hSession->availTailIndex = 0;
         WRITE_LOG(LOG_FATAL, "Recv server-hello failed");
         return false;
     }
-    if (handshake.authType == AUTH_NONE) {
-        if (GetSessionAuthStatus(handshake.sessionId) != AUTH_NONE) {
-            WRITE_LOG(LOG_FATAL, "session %s is already, But now session is %s, refused!",
-                Hdc::MaskSessionIdToString(handshake.sessionId).c_str(), sessionIdMaskStr.c_str());
-            return false;
-        }
-        DaemonSessionHandshakeInit(hSession, handshake);
+    return true;
+}
+
+bool HdcDaemon::HandleExtraAuthHandshake(HSession hSession, uint32_t channelId, SessionHandShake &handshake,
+                                         const std::string &sessionIdMaskStr, bool &handled)
+{
+    handled = false;
+    if (hSession->extraAuthRequired && handshake.authType != AUTH_SIGNATURE) {
+        WRITE_LOG(LOG_WARN, "invalid extra auth response type %d for session %s", handshake.authType,
+            sessionIdMaskStr.c_str());
+        RejectExtraAuth(hSession, channelId, handshake);
+        handled = true;
+        return true;
     }
-    if (!HandDaemonAuth(hSession, channelId, handshake)) {
-        WRITE_LOG(LOG_FATAL, "auth failed");
-        return false;
+    if (!hSession->extraAuthRequired) {
+        return true;
     }
+    handled = true;
+    if (!VerifyExtraAuth(hSession, handshake.buf)) {
+        WRITE_LOG(LOG_WARN, "extra auth verify failed for session %s", sessionIdMaskStr.c_str());
+        RejectExtraAuth(hSession, channelId, handshake);
+        return true;
+    }
+    hSession->extraAuthRequired = false;
+    hSession->extraAuthPassed = true;
+    hSession->extraAuthChallengeTime = 0;
+    SendAuthOkMsg(handshake, channelId, hSession);
+    return true;
+}
+
+bool HdcDaemon::CheckHandshakeVersion(HSession hSession, uint32_t channelId, SessionHandShake &handshake)
+{
     string version = Base::GetVersion() + HDC_MSG_HASH;
-
     WRITE_LOG(LOG_DEBUG, "receive hs version = %s", handshake.version.c_str());
-
     if (!handshake.version.empty() && handshake.version != version) {
         WRITE_LOG(LOG_FATAL, "DaemonSessionHandshake failed! version not match [%s] vs [%s]",
             handshake.version.c_str(), version.c_str());
@@ -1079,7 +1183,47 @@ bool HdcDaemon::DaemonSessionHandshake(HSession hSession, const uint32_t channel
         handshake.version = Base::GetVersion();
         WRITE_LOG(LOG_FATAL, "set version if check mode = %s", handshake.version.c_str());
     }
-    // handshake auth OK.Can append the sending device information to HOST
+    return true;
+}
+
+bool HdcDaemon::DaemonSessionHandshake(HSession hSession, const uint32_t channelId, uint8_t *payload, int payloadSize)
+{
+    StartTraceScope("HdcDaemon::DaemonSessionHandshake");
+    SessionHandShake handshake;
+    std::string sessionIdMaskStr;
+    if (!ParseDaemonHandshake(hSession, payload, payloadSize, handshake, sessionIdMaskStr)) {
+        return false;
+    }
+    if (hSession->extraAuthFailed) {
+        WRITE_LOG(LOG_WARN, "session %s already failed extra auth", sessionIdMaskStr.c_str());
+        return false;
+    }
+    if (hSession->extraAuthPassed && hSession->handshakeOK) {
+        WRITE_LOG(LOG_WARN, "session %s received handshake after extra auth completed", sessionIdMaskStr.c_str());
+        return false;
+    }
+    bool handled = false;
+    if (!HandleExtraAuthHandshake(hSession, channelId, handshake, sessionIdMaskStr, handled)) {
+        return false;
+    }
+    if (handled) {
+        return true;
+    }
+    if (handshake.authType == AUTH_NONE) {
+        if (GetSessionAuthStatus(handshake.sessionId) != AUTH_NONE) {
+            WRITE_LOG(LOG_FATAL, "session %s is already, But now session is %s, refused!",
+                Hdc::MaskSessionIdToString(handshake.sessionId).c_str(), sessionIdMaskStr.c_str());
+            return false;
+        }
+        DaemonSessionHandshakeInit(hSession, handshake);
+    }
+    if (!HandDaemonAuth(hSession, channelId, handshake)) {
+        WRITE_LOG(LOG_FATAL, "auth failed");
+        return false;
+    }
+    if (!CheckHandshakeVersion(hSession, channelId, handshake)) {
+        return false;
+    }
 #ifdef HDC_DEBUG
     WRITE_LOG(LOG_INFO, "session %s handshakeOK send back CMD_KERNEL_HANDSHAKE", sessionIdMaskStr.c_str());
 #endif
@@ -1143,7 +1287,8 @@ bool HdcDaemon::CheckControl(const uint16_t command)
 
 bool HdcDaemon::CheckAuthStatus(HSession hSession, const uint32_t channelId, const uint16_t command)
 {
-    if (authEnable && (GetSessionAuthStatus(hSession->sessionId) != AUTH_OK) &&
+    if ((hSession->extraAuthRequired || hSession->extraAuthFailed ||
+        (authEnable && GetSessionAuthStatus(hSession->sessionId) != AUTH_OK)) &&
         command != CMD_KERNEL_HANDSHAKE && command != CMD_KERNEL_CHANNEL_CLOSE && command != CMD_SSL_HANDSHAKE) {
         string authmsg = GetSessionAuthmsg(hSession->sessionId);
         WRITE_LOG(LOG_WARN, "session %s auth failed: %s for command %u",
@@ -1486,6 +1631,17 @@ string HdcDaemon::GetSessionAuthmsg(uint32_t sessionid)
 void HdcDaemon::SendAuthOkMsg(SessionHandShake &handshake, uint32_t channelid,
                               HSession hSession, string msg, string daemonAuthResult)
 {
+    if (daemonAuthResult == DAEOMN_AUTH_SUCCESS && IsExtraAuthEnabled() &&
+        !hSession->extraAuthRequired && !hSession->extraAuthPassed && !hSession->extraAuthFailed) {
+        if (!HdcExtraAuth::IsClientVersionSupported(handshake.version)) {
+            RejectUnsupportedClient(handshake, channelid, hSession);
+            return;
+        }
+        if (!StartExtraAuth(hSession, channelid, handshake)) {
+            RejectExtraAuth(hSession, channelid, handshake);
+        }
+        return;
+    }
     char hostname[BUF_SIZE_MEDIUM] = { 0 };
     if (gethostname(hostname, BUF_SIZE_MEDIUM) != 0) {
         WRITE_LOG(LOG_FATAL, "get hostname failed %s", strerror(errno));

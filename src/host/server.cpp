@@ -14,7 +14,10 @@
  */
 #include "server.h"
 
+#include <cstdlib>
+
 #include "connect_validation.h"
+#include "extra_auth.h"
 #include "host_updater.h"
 #include "runtime_config.h"
 #include "server_cmd_log.h"
@@ -631,6 +634,60 @@ bool HdcServer::HandleAuthSignatureMsg(HSession hSession, SessionHandShake &hand
     return true;
 }
 
+bool HdcServer::CheckAuthToolEnv()
+{
+    const char *jarEnv = std::getenv(HdcExtraAuth::AUTH_TOOL_JAR_ENV);
+    if (jarEnv == nullptr || jarEnv[0] == '\0') {
+        lastErrorNum = 0x000011;
+        WRITE_LOG(LOG_FATAL,
+            "[E000011] Environment variable %s is not set.\n"
+            "Please set it to the full path of device-auth-tool.jar before running hdc:\n",
+            HdcExtraAuth::AUTH_TOOL_JAR_ENV);
+        return false;
+    }
+    const char *urlEnv = std::getenv(HdcExtraAuth::AUTH_TOOL_SERVER_URL_ENV);
+    if (urlEnv == nullptr || urlEnv[0] == '\0') {
+        lastErrorNum = 0x000011;
+        WRITE_LOG(LOG_FATAL,
+            "[E000011] Environment variable %s is not set.\n"
+            "Please set it to the pki server url before running hdc:\n",
+            HdcExtraAuth::AUTH_TOOL_SERVER_URL_ENV);
+        return false;
+    }
+    return true;
+}
+
+bool HdcServer::HandleExtraAuthChallenge(HSession hSession, SessionHandShake &handshake)
+{
+    if (!CheckAuthToolEnv()) {
+        return false;
+    }
+
+    std::string pda;
+    if (!HdcExtraAuth::ApplyPda(handshake.buf, pda)) {
+        lastErrorNum = 0x000011;
+        WRITE_LOG(LOG_WARN, "applyPda (device-auth-tool) failed for session %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return false;
+    }
+
+    hSession->extraAuthRequired = true;
+    hSession->extraAuthPassed = false;
+    hSession->extraAuthFailed = false;
+    handshake.authType = AUTH_SIGNATURE;
+    handshake.buf = pda;
+    string bufString = SerialStruct::SerializeToString(handshake);
+    int ret = Send(hSession->sessionId, 0, CMD_KERNEL_HANDSHAKE,
+        reinterpret_cast<uint8_t *>(const_cast<char *>(bufString.c_str())), bufString.size());
+    if (ret <= 0) {
+        hSession->extraAuthRequired = false;
+        WRITE_LOG(LOG_WARN, "send extra auth response failed for session %s",
+            Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return false;
+    }
+    return true;
+}
+
 bool HdcServer::HandServerAuth(HSession hSession, SessionHandShake &handshake)
 {
 #ifdef HDC_SUPPORT_ENCRYPT_TCP
@@ -868,6 +925,9 @@ bool HdcServer::ServerSessionHandshake(HSession hSession, uint8_t *payload, int 
         WRITE_LOG(LOG_DEBUG, "Hello failed");
         return false;
     }
+    if (handshake.authType == AUTH_FAIL) {
+        return HandleExtraAuthChallenge(hSession, handshake);
+    }
     if (handshake.authType != AUTH_OK) {
         if (!HandServerAuth(hSession, handshake)) {
             WRITE_LOG(LOG_WARN, "Auth failed");
@@ -876,6 +936,10 @@ bool HdcServer::ServerSessionHandshake(HSession hSession, uint8_t *payload, int 
         return true;
     }
     // handshake auth OK
+    if (hSession->extraAuthRequired) {
+        hSession->extraAuthRequired = false;
+        hSession->extraAuthPassed = true;
+    }
 #ifdef HDC_SUPPORT_ENCRYPT_TCP
     if (hSession->connType == CONN_TCP && Base::GetEncrpytTCPSwitch() && !hSession->sslHandshake) {
         WRITE_LOG(LOG_FATAL, "reject auth-ok without ssl handshake (downgrade) for session %s, encryption required",
