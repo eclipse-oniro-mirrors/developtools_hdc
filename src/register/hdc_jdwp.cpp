@@ -98,19 +98,22 @@ bool HdcJdwpSimulator::Connect2Jdwp()
     timeout.tv_usec = 0;
     setsockopt(cfd_, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     size_t caddrLen = sizeof(caddr.sun_family) + sizeof(jdwp) - 1;
-    int retry = 3;
+    constexpr int maxRetry = 3;
+    int retry = maxRetry;
     int rc = 0;
+    int err = 0;
     while (retry-- > 0) {
         rc = connect(cfd_, reinterpret_cast<struct sockaddr *>(&caddr), caddrLen);
         if (rc == 0) {
-            HILOG_INFO(LOG_CORE, "connect success cfd:%{public}d", cfd_);
+            HILOG_DEBUG(LOG_CORE, "connect success cfd:%{public}d", cfd_);
             break;
         }
+        err = errno; // sleep may overwrite errno, save it right after connect fails
         constexpr int to = 3;
         sleep(to);
     }
     if (rc != 0) {
-        HILOG_INFO(LOG_CORE, "connect failed cfd_:%{public}d", cfd_);
+        HILOG_WARN(LOG_CORE, "connect jdwp control failed after %{public}d retries, errno:%{public}d", maxRetry, err);
         close(cfd_);
         cfd_ = -1;
         return false;
@@ -261,7 +264,6 @@ bool HdcJdwpSimulator::Connect()
         }
         bool b = Connect2Jdwp();
         if (!b) {
-            HILOG_INFO(LOG_CORE, "Connect2Jdwp failed cfd:%{public}d", cfd_);
             WaitForJdwp();
             continue;
         }
@@ -287,13 +289,17 @@ void HdcJdwpSimulator::WaitForJdwp()
 void HdcJdwpSimulator::AddWatchHdcdJdwp()
 {
     int rc = WatchParameter(PERSIST_HDC_JDWP, HdcJdwpSimulator::ParameterChanged, this);
-    HILOG_INFO(LOG_CORE, "AddWatchHdcdJdwp rc:%{public}d", rc);
+    if (rc != 0) {
+        HILOG_WARN(LOG_CORE, "AddWatchHdcdJdwp failed rc:%{public}d", rc);
+    }
 }
 
 void HdcJdwpSimulator::DelWatchHdcdJdwp()
 {
     int rc = RemoveParameterWatcher(PERSIST_HDC_JDWP, nullptr, nullptr);
-    HILOG_INFO(LOG_CORE, "DelWatchHdcdJdwp rc:%{public}d", rc);
+    if (rc != 0) {
+        HILOG_WARN(LOG_CORE, "DelWatchHdcdJdwp failed rc:%{public}d", rc);
+    }
 }
 
 void HdcJdwpSimulator::ParameterChanged(const char *key, const char *value, void *context)
@@ -320,7 +326,8 @@ void HdcJdwpSimulator::AddApplicationUpdateCallback()
     using namespace OHOS::AppExecFwk;
     auto& img = AppImageObserverManager::GetInstance();
     if (img.GetImageProcessType() != static_cast<int32_t>(ImageProcessType::TEMPLATE) || img.IsAbilityCreated()) {
-        HILOG_INFO(LOG_CORE, "skip register image callback");
+        HILOG_DEBUG(LOG_CORE, "skip register image callback, type:%{public}d abilityCreated:%{public}d",
+            img.GetImageProcessType(), img.IsAbilityCreated());
         return;
     }
 
@@ -335,7 +342,7 @@ void HdcJdwpSimulator::AddApplicationUpdateCallback()
 
         void NotifyApplicationUpdate() override
         {
-            HILOG_INFO(LOG_CORE, "recv image callback");
+            HILOG_DEBUG(LOG_CORE, "recv image callback");
             HdcJdwpSimulator::ParameterChanged(PERSIST_HDC_JDWP, "1", hdcJdwpSimulator_);
         }
 
