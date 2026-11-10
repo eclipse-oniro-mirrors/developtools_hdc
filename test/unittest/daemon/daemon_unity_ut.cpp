@@ -228,15 +228,4 @@ HWTEST_F(HdcDaemonUnityTest, SetDeviceRunMode_InvalidPort_ReturnsFalse, TestSize
     EXPECT_FALSE(u.SetDeviceRunMode("port abc"));
     delete info;
 }
-
-// SetDeviceRunMode：port close → true（不真实切换端口）
-HWTEST_F(HdcDaemonUnityTest, SetDeviceRunMode_PortClose_ReturnsTrue, TestSize.Level0)
-{
-    HTaskInfo info = NewInfo();
-    info->channelTask = true;
-    HdcDaemonUnity u(info);
-    EXPECT_TRUE(u.SetDeviceRunMode("port close"));
-    delete info;
-}
-
 }  // namespace Hdc

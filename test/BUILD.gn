@@ -22,6 +22,7 @@ declare_args() {
 hdc_common_sources = [
   "${hdc_path}/src/common/async_cmd.cpp",
   "${hdc_path}/src/common/auth.cpp",
+  "${hdc_path}/src/common/extra_auth.cpp",
   "${hdc_path}/src/common/base.cpp",
   "${hdc_path}/src/common/channel.cpp",
   "${hdc_path}/src/common/circle_buffer.cpp",
@@ -57,6 +58,7 @@ hdc_daemon_sources = [
   "${hdc_path}/src/daemon/shell.cpp",
   "${hdc_path}/src/daemon/system_depend.cpp",
   "${hdc_path}/src/daemon/daemon_base.cpp",
+  "${hdc_path}/src/common/extra_auth_daemon.cpp",
 ]
 
 hdc_host_sources = [
@@ -71,6 +73,7 @@ hdc_host_sources = [
   "${hdc_path}/src/host/server_for_client.cpp",
   "${hdc_path}/src/host/server_instance.cpp",
   "${hdc_path}/src/host/translate.cpp",
+  "${hdc_path}/src/common/extra_auth_host.cpp",
   "${hdc_path}/src/host/runtime_config.cpp",
   "${hdc_path}/src/host/subserver/file_lock_util.cpp",
   "${hdc_path}/src/host/subserver/file_lock_util_unix.cpp",
@@ -383,6 +386,7 @@ ohos_unittest("hdc_host_base_unittest") {
     "${hdc_path}/src/host/host_shell_option.cpp",
     "${hdc_path}/src/host/translate.cpp",
     "${hdc_path}/src/common/server_cmd_log.cpp",
+    "${hdc_path}/src/common/extra_auth_host.cpp",
     "${hdc_path}/src/common/uart.cpp",
     "${hdc_path}/src/host/runtime_config.cpp",
     "${hdc_path}/src/host/subserver/file_lock_util.cpp",
@@ -462,6 +466,7 @@ ohos_unittest("hdc_daemon_base_unittest") {
     "unittest/daemon/system_depend_ut.cpp",
     "unittest/daemon/daemon_forward_ut.cpp",
     "${hdc_path}/src/daemon/daemon.cpp",
+    "${hdc_path}/src/common/extra_auth_daemon.cpp",
     "${hdc_path}/src/daemon/main.cpp",
     "${hdc_path}/src/daemon/daemon_unity.cpp",
     "${hdc_path}/src/daemon/daemon_tcp.cpp",

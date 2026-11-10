@@ -27,6 +27,7 @@ declare_args() {
 hdc_common_sources = [
   "src/common/async_cmd.cpp",
   "src/common/auth.cpp",
+  "src/common/extra_auth.cpp",
   "src/common/base.cpp",
   "src/common/channel.cpp",
   "src/common/circle_buffer.cpp",
@@ -105,6 +106,7 @@ template("hdcd_source_set") {
   ohos_source_set(target_name) {
     use_exceptions = true
     sources = [
+      "src/common/extra_auth_daemon.cpp",
       "src/daemon/daemon.cpp",
       "src/daemon/daemon_app.cpp",
       "src/daemon/daemon_base.cpp",
@@ -435,6 +437,7 @@ if (product_name == "ohos-sdk") {
       defines += [ "HDC_DEBUG" ]
     }
     sources = [
+      "src/common/extra_auth_host.cpp",
       "src/host/client.cpp",
       "src/host/host_app.cpp",
       "src/host/host_forward.cpp",
