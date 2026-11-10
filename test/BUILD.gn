@@ -757,6 +757,7 @@ config("hdc_test_config") {
   include_dirs = [
     "${hdc_path}/test/fuzztest/jdwpreadstream_fuzzer",
     "${hdc_path}/test/fuzztest/forwardreadstream_fuzzer",
+    "${hdc_path}/test/fuzztest/forwardcmddispatch_fuzzer",
     "${hdc_path}/src/daemon",
     "${hdc_path}/src/common",
     "${hdc_path}/src/host/subserver",
@@ -818,9 +819,23 @@ ohos_fuzztest("ForwardReadStreamFuzzTest") {
   external_deps += [ "hilog:libhilog" ]
 }
 
+ohos_fuzztest("ForwardCmdDispatchFuzzTest") {
+  module_out_path = FUZZ_OUTPUT_PATH
+  fuzz_config_file = "${hdc_path}/test/fuzztest/forwardcmddispatch_fuzzer"
+  configs = [ ":hdc_test_config" ]
+  cflags = fuzz_cflags
+  sources = [ "fuzztest/forwardcmddispatch_fuzzer/ForwardCommandDispatch_fuzzer.cpp" ]
+  deps = [ ":hdc_common" ]
+  subsystem_name = "developtools"
+  part_name = "hdc"
+  external_deps = common_external_deps
+  external_deps += [ "hilog:libhilog" ]
+}
+
 group("hdc_fuzztest") {
   testonly = true
   deps = [
+    ":ForwardCmdDispatchFuzzTest",
     ":ForwardReadStreamFuzzTest",
     ":JdwpReadStreamFuzzTest",
   ]
