@@ -832,9 +832,23 @@ ohos_fuzztest("ForwardCmdDispatchFuzzTest") {
   external_deps += [ "hilog:libhilog" ]
 }
 
+ohos_fuzztest("DecryptPayloadFuzzTest") {
+  module_out_path = FUZZ_OUTPUT_PATH
+  fuzz_config_file = "${hdc_path}/test/fuzztest/decryptpayload_fuzzer"
+  configs = [ ":hdc_test_config" ]
+  cflags = fuzz_cflags
+  sources = [ "fuzztest/decryptpayload_fuzzer/DecryptPayload_fuzzer.cpp" ]
+  deps = [ ":hdc_common" ]
+  subsystem_name = "developtools"
+  part_name = "hdc"
+  external_deps = common_external_deps
+  external_deps += [ "hilog:libhilog" ]
+}
+
 group("hdc_fuzztest") {
   testonly = true
   deps = [
+    ":DecryptPayloadFuzzTest",
     ":ForwardCmdDispatchFuzzTest",
     ":ForwardReadStreamFuzzTest",
     ":JdwpReadStreamFuzzTest",
