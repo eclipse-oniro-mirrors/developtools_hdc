@@ -33,16 +33,16 @@ hdc_common_sources = [
   "src/common/compress.cpp",
   "src/common/decompress.cpp",
   "src/common/entry.cpp",
-  "src/common/hdc_statistic_reporter.cpp",
   "src/common/file.cpp",
   "src/common/file_descriptor.cpp",
   "src/common/forward.cpp",
+  "src/common/hdc_ssl.cpp",
+  "src/common/hdc_statistic_reporter.cpp",
   "src/common/header.cpp",
   "src/common/heartbeat.cpp",
   "src/common/memory_pool.cpp",
   "src/common/server_cmd_log.cpp",
   "src/common/session.cpp",
-  "src/common/hdc_ssl.cpp",
   "src/common/task.cpp",
   "src/common/tcp.cpp",
   "src/common/tlv.cpp",
@@ -52,12 +52,8 @@ hdc_common_sources = [
 ]
 
 hash_sources = [
-  "scripts/hdc_hash_gen.py",
   "scripts/file_path.cfg",
-  "src/common/base.cpp",
-  "src/common/channel.h",
-  "src/common/session.h",
-  "src/common/transfer.h",
+  "scripts/hdc_hash_gen.py",
 ]
 
 if (hdc_support_uart) {
@@ -92,8 +88,8 @@ if (build_selinux && product_name != "ohos-sdk" && support_jsapi) {
     configs = [ ":hdc_config" ]
     external_deps = [
       "ipc:ipc_single",
-      "os_account:os_account_innerkits",
       "os_account:account_iam_innerkits",
+      "os_account:os_account_innerkits",
     ]
     version_script = "src/daemon/libhdc_account_adapter.map"
     output_name = "hdc_account_adapter"
@@ -111,6 +107,7 @@ template("hdcd_source_set") {
     sources = [
       "src/daemon/daemon.cpp",
       "src/daemon/daemon_app.cpp",
+      "src/daemon/daemon_base.cpp",
       "src/daemon/daemon_bridge.cpp",
       "src/daemon/daemon_forward.cpp",
       "src/daemon/daemon_ssl.cpp",
@@ -121,7 +118,6 @@ template("hdcd_source_set") {
       "src/daemon/main.cpp",
       "src/daemon/shell.cpp",
       "src/daemon/system_depend.cpp",
-      "src/daemon/daemon_base.cpp",
     ]
     sources += hdc_common_sources
     sources += [ "src/common/connect_validation.cpp" ]
@@ -133,11 +129,11 @@ template("hdcd_source_set") {
       "HDC_HILOG",
       "OPENSSL_SUPPRESS_DEPRECATED",
       "HDC_SUPPORT_ENCRYPT_TCP",
-      "MEMORY_POOL_ENABLE"
+      "MEMORY_POOL_ENABLE",
     ]
 
-    if (!build_selinux || image_name != "system" || product_name == "ohos-sdk" ||
-        !support_jsapi) {
+    if (!build_selinux || image_name != "system" ||
+        product_name == "ohos-sdk" || !support_jsapi) {
       defines += [ "HDC_NO_ACCOUNT" ]
     }
 
@@ -194,11 +190,11 @@ template("hdcd_source_set") {
       if (image_name == "system") {
         defines += [
           "HDC_TRACE",
-          "HDC_STATISTIC_REPORT_ENABLE"
+          "HDC_STATISTIC_REPORT_ENABLE",
         ]
         external_deps += [
-          "hitrace:hitrace_meter",
           "hisysevent:libhisysevent",
+          "hitrace:hitrace_meter",
         ]
       }
     }
@@ -207,14 +203,15 @@ template("hdcd_source_set") {
       defines += [ "HDC_VERSION_CHECK" ]
     }
 
-    if (build_selinux && image_name == "system" && hdc_feature_support_report_command_event) {
+    if (build_selinux && image_name == "system" &&
+        hdc_feature_support_report_command_event) {
       defines += [ "HDC_SUPPORT_REPORT_COMMAND_EVENT" ]
       sources += [ "src/common/credential_message.cpp" ]
       sources += [ "src/common/command_event_report.cpp" ]
       defines += [ "DAEMON_ONLY" ]
       external_deps += [
-        "common_event_service:cesfwk_innerkits",
         "ability_base:want",
+        "common_event_service:cesfwk_innerkits",
       ]
     }
 
@@ -418,125 +415,125 @@ build_hdc("updater") {
 
 if (product_name == "ohos-sdk") {
   ohos_executable("hdc") {
-  use_exceptions = true
-  ldflags = []
-  libs = []
-  configs = [ ":hdc_config" ]
-  defines = [
-    "HDC_HOST",
-    "HARMONY_PROJECT",
-    "USE_CONFIG_UV_THREADS",
-    "SIZE_THREAD_POOL=$hdc_uv_thread_size",
-    "OPENSSL_SUPPRESS_DEPRECATED",
-    "HDC_SUPPORT_ENCRYPT_TCP",
-    "MEMORY_POOL_ENABLE"
-  ]
-  if (is_mac) {
-    defines += [ "HOST_MAC" ]
-  }
-  if (hdc_debug) {
-    defines += [ "HDC_DEBUG" ]
-  }
-  sources = [
-    "src/host/client.cpp",
-    "src/host/host_app.cpp",
-    "src/host/host_forward.cpp",
-    "src/host/host_shell_option.cpp",
-    "src/host/host_ssl.cpp",
-    "src/host/host_tcp.cpp",
-    "src/host/host_unity.cpp",
-    "src/host/host_updater.cpp",
-    "src/host/host_usb.cpp",
-    "src/host/main.cpp",
-    "src/host/runtime_config.cpp",
-    "src/host/server.cpp",
-    "src/host/server_for_client.cpp",
-    "src/host/server_instance.cpp",
-    "src/host/subserver/process_handle.cpp",
-    "src/host/subserver/process_handle_win.cpp",
-    "src/host/subserver/process_handle_unix.cpp",
-    "src/host/subserver/file_lock_util.cpp",
-    "src/host/subserver/file_lock_util_win.cpp",
-    "src/host/subserver/file_lock_util_unix.cpp",
-    "src/host/subserver/subserver_process_info.cpp",
-    "src/host/subserver/subserver_manager.cpp",
-    "src/host/translate.cpp",
-  ]
-  sources += hdc_common_sources
-  if (hdc_support_uart) {
-    defines += [ "HDC_SUPPORT_UART" ]
-    sources += [ "src/host/host_uart.cpp" ]
-  }
-
-  external_deps = [
-    "bounds_checking_function:libsec_static",
-    "libusb:libusb",
-    "libuv:uv_static",
-    "lz4:liblz4_static",
-    "openssl:libcrypto_static",
-    "openssl:libssl_static",
-  ]
-
-  if (is_ohos) {
-    defines += [ "IS_RELEASE_VERSION" ]
-    sources += [
-      "src/common/credential_message.cpp",
-      "src/common/connect_validation.cpp",
-      "src/host/system_depend.cpp",
+    use_exceptions = true
+    ldflags = []
+    libs = []
+    configs = [ ":hdc_config" ]
+    defines = [
+      "HDC_HOST",
+      "HARMONY_PROJECT",
+      "USE_CONFIG_UV_THREADS",
+      "SIZE_THREAD_POOL=$hdc_uv_thread_size",
+      "OPENSSL_SUPPRESS_DEPRECATED",
+      "HDC_SUPPORT_ENCRYPT_TCP",
+      "MEMORY_POOL_ENABLE",
     ]
-    sources += [ "src/common/hdc_huks.cpp" ]
-    sources += [ "src/common/password.cpp" ]
-    sources += [ "src/common/command_event_report.cpp" ]
-    defines += [ "HDC_SUPPORT_ENCRYPT_PRIVATE_KEY" ]
-    defines += [ "HOST_OHOS" ]
-    defines += [ "HDC_SUPPORT_REPORT_COMMAND_EVENT" ]
-    external_deps += [
-      "huks:libhukssdk",
-      "c_utils:utils",
-      "init:libbegetutil",
+    if (is_mac) {
+      defines += [ "HOST_MAC" ]
+    }
+    if (hdc_debug) {
+      defines += [ "HDC_DEBUG" ]
+    }
+    sources = [
+      "src/host/client.cpp",
+      "src/host/host_app.cpp",
+      "src/host/host_forward.cpp",
+      "src/host/host_shell_option.cpp",
+      "src/host/host_ssl.cpp",
+      "src/host/host_tcp.cpp",
+      "src/host/host_unity.cpp",
+      "src/host/host_updater.cpp",
+      "src/host/host_usb.cpp",
+      "src/host/main.cpp",
+      "src/host/runtime_config.cpp",
+      "src/host/server.cpp",
+      "src/host/server_for_client.cpp",
+      "src/host/server_instance.cpp",
+      "src/host/subserver/file_lock_util.cpp",
+      "src/host/subserver/file_lock_util_unix.cpp",
+      "src/host/subserver/file_lock_util_win.cpp",
+      "src/host/subserver/process_handle.cpp",
+      "src/host/subserver/process_handle_unix.cpp",
+      "src/host/subserver/process_handle_win.cpp",
+      "src/host/subserver/subserver_manager.cpp",
+      "src/host/subserver/subserver_process_info.cpp",
+      "src/host/translate.cpp",
     ]
-  }
+    sources += hdc_common_sources
+    if (hdc_support_uart) {
+      defines += [ "HDC_SUPPORT_UART" ]
+      sources += [ "src/host/host_uart.cpp" ]
+    }
 
-  deps = [ ":hdc_hash_gen" ]
-
-  if (!(is_mingw || is_mac) && build_selinux) {
-    external_deps += [ "selinux:libselinux" ]
-    defines += [ "SURPPORT_SELINUX" ]
-  }
-
-  if (hdc_version_check) {
-    defines += [ "HDC_VERSION_CHECK" ]
-  }
-
-  if (is_mingw) {
-    static_link = false
-
-    # we should use something we define , not just _WIN32 (this will defined in some windows header)
-    defines += [ "HOST_MINGW" ]  # we define this for mingw
-    defines += [ "WIN32_LEAN_AND_MEAN" ]
-    libs += [ "setupapi" ]
-    ldflags += [
-      "-Wl,--whole-archive",
-      "-lpthread",
-      "-Wl,--no-whole-archive",
+    external_deps = [
+      "bounds_checking_function:libsec_static",
+      "libusb:libusb",
+      "libuv:uv_static",
+      "lz4:liblz4_static",
+      "openssl:libcrypto_static",
+      "openssl:libssl_static",
     ]
-  }
 
-  if (is_linux) {
-    static_link = false
-    defines += [ "HOST_LINUX" ]
-    ldflags += [
-      "-Wl,--whole-archive",
-      "-lpthread",
-      "-latomic",
-      "-ldl",
-      "-lrt",
-      "-Wl,--no-whole-archive",
-    ]
-  }
+    if (is_ohos) {
+      defines += [ "IS_RELEASE_VERSION" ]
+      sources += [
+        "src/common/connect_validation.cpp",
+        "src/common/credential_message.cpp",
+        "src/host/system_depend.cpp",
+      ]
+      sources += [ "src/common/hdc_huks.cpp" ]
+      sources += [ "src/common/password.cpp" ]
+      sources += [ "src/common/command_event_report.cpp" ]
+      defines += [ "HDC_SUPPORT_ENCRYPT_PRIVATE_KEY" ]
+      defines += [ "HOST_OHOS" ]
+      defines += [ "HDC_SUPPORT_REPORT_COMMAND_EVENT" ]
+      external_deps += [
+        "c_utils:utils",
+        "huks:libhukssdk",
+        "init:libbegetutil",
+      ]
+    }
 
-  subsystem_name = "developtools"
-  part_name = "hdc"
+    deps = [ ":hdc_hash_gen" ]
+
+    if (!(is_mingw || is_mac) && build_selinux) {
+      external_deps += [ "selinux:libselinux" ]
+      defines += [ "SURPPORT_SELINUX" ]
+    }
+
+    if (hdc_version_check) {
+      defines += [ "HDC_VERSION_CHECK" ]
+    }
+
+    if (is_mingw) {
+      static_link = false
+
+      # we should use something we define , not just _WIN32 (this will defined in some windows header)
+      defines += [ "HOST_MINGW" ]  # we define this for mingw
+      defines += [ "WIN32_LEAN_AND_MEAN" ]
+      libs += [ "setupapi" ]
+      ldflags += [
+        "-Wl,--whole-archive",
+        "-lpthread",
+        "-Wl,--no-whole-archive",
+      ]
+    }
+
+    if (is_linux) {
+      static_link = false
+      defines += [ "HOST_LINUX" ]
+      ldflags += [
+        "-Wl,--whole-archive",
+        "-lpthread",
+        "-latomic",
+        "-ldl",
+        "-lrt",
+        "-Wl,--no-whole-archive",
+      ]
+    }
+
+    subsystem_name = "developtools"
+    part_name = "hdc"
   }
 }
 
@@ -569,6 +566,7 @@ action("hdc_hash_gen") {
   script = "scripts/hdc_hash_gen.py"
   sources = hash_sources
   outputs = [ "$py_out_dir/hdc_hash_gen.h" ]
+  depfile = "$target_gen_dir/hdc_hash_gen.d"
   args = [
     "-f",
     "hdc_hash_gen.h",
@@ -576,6 +574,10 @@ action("hdc_hash_gen") {
     rebase_path(".", root_build_dir),
     "-o",
     rebase_path("$py_out_dir" + "/", root_build_dir),
+    "--depfile",
+    rebase_path(depfile, root_build_dir),
+    "--dep-target",
+    rebase_path(outputs[0], root_build_dir),
   ]
   public_configs = [ ":hdc_config" ]
 }
@@ -611,10 +613,10 @@ ohos_shared_library("hdc_register") {
     "src/register/hdc_jdwp.cpp",
   ]
 
-  if (product_name != "ohos-sdk"&& support_jsapi) {
+  if (product_name != "ohos-sdk" && support_jsapi) {
     external_deps += [
-      "ability_runtime:application_image_observer_manager",
       "ability_runtime:app_manager",
+      "ability_runtime:application_image_observer_manager",
     ]
 
     defines += [ "IMAGE_LIFECYCLE_ENABLE" ]
