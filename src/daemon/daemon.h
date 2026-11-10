@@ -70,6 +70,10 @@ private:
     void JdwpNewFileDescriptor(const uint8_t *buf, const int bytesIO) override;
     static bool CheckControl(const uint16_t command);
     static bool IsExpectedParam(const std::string& param, const std::string& expect);
+    bool StartExtraAuth(HSession hSession, const uint32_t channelId, SessionHandShake &handshake);
+    bool VerifyExtraAuth(HSession hSession, const string &response);
+    void RejectExtraAuth(HSession hSession, const uint32_t channelId, SessionHandShake &handshake);
+    void RejectUnsupportedClient(SessionHandShake &handshake, uint32_t channelId, HSession hSession);
     bool HandDaemonAuth(HSession hSession, const uint32_t channelId, SessionHandShake &handshake);
     bool GetHostPubkeyInfo(const string& buf, string& hostname, string& pubkey);
     bool AlreadyInKnownHosts(const string& key);
@@ -78,6 +82,11 @@ private:
     void ClearInstanceResource() override;
     void DaemonSessionHandshakeInit(HSession &hSession, SessionHandShake &handshake);
     void GetServerCapability(HSession &hSession, SessionHandShake &handshake);
+    bool ParseDaemonHandshake(HSession hSession, uint8_t *payload, int payloadSize,
+                              SessionHandShake &handshake, std::string &sessionIdMaskStr);
+    bool HandleExtraAuthHandshake(HSession hSession, uint32_t channelId, SessionHandShake &handshake,
+                                  const std::string &sessionIdMaskStr, bool &handled);
+    bool CheckHandshakeVersion(HSession hSession, uint32_t channelId, SessionHandShake &handshake);
     bool DaemonSessionHandshake(HSession hSession, const uint32_t channelId, uint8_t *payload, int payloadSize);
     void TryStopInstance();
     UserPermit PostUIConfirm(string hostname, string pubkey);
@@ -95,6 +104,7 @@ private:
 #endif
 
     bool HandDaemonAuthBypass(void);
+    bool IsExtraAuthEnabled();
     bool ShouldSkipAuthBypassForEncrypt(HSession hSession);
     bool ShouldAutoAcceptPubkeyForEncrypt(HSession hSession);
     void SendAuthSignMsg(SessionHandShake &handshake,

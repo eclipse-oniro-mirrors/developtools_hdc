@@ -23,6 +23,9 @@
 #include "system_depend.h"
 #endif
 #include "host_shell_option.h"
+#include "extra_auth.h"
+#include <chrono>
+#include <thread>
 #ifdef HDC_SUPPORT_REPORT_COMMAND_EVENT
 #include "command_event_report.h"
 #endif
@@ -1396,6 +1399,29 @@ bool HdcServerForClient::DoCommand(HChannel hChannel, void *formatCommandInput, 
     return ret;
 }
 
+static bool WaitForSessionHandshakeReady(HSession hSession)
+{
+    if (hSession == nullptr) {
+        return false;
+    }
+    if (hSession->handshakeOK) {
+        return true;
+    }
+    WRITE_LOG(LOG_INFO, "wait for session handshake ready sid:%s",
+        Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+    constexpr int kWaitSliceMs = 20;
+    const int waitTotalMs = static_cast<int>(HdcExtraAuth::CHALLENGE_TIMEOUT_MS) + 2000;
+    for (int waited = 0; waited < waitTotalMs && !hSession->handshakeOK; waited += kWaitSliceMs) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(kWaitSliceMs));
+    }
+    if (!hSession->handshakeOK) {
+        WRITE_LOG(LOG_WARN, "session handshake still not ready after %dms sid:%s",
+            waitTotalMs, Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
+        return false;
+    }
+    return true;
+}
+
 // just call from BindChannelToSession
 HSession HdcServerForClient::FindAliveSessionFromDaemonMap(const HChannel hChannel)
 {
@@ -1433,9 +1459,7 @@ HSession HdcServerForClient::FindAliveSessionFromDaemonMap(const HChannel hChann
         EchoClient(hChannel, MSG_FAIL, "Bind tartget session is dead");
         return nullptr;
     }
-    if (!hdi->hSession->handshakeOK) {
-        WRITE_LOG(LOG_WARN, "hSession handShake is false sid:%s cid:%u",
-            Hdc::MaskSessionIdToString(hdi->hSession->sessionId).c_str(), hChannel->channelId);
+    if (!WaitForSessionHandshakeReady(hdi->hSession)) {
         FillChannelResult(hChannel, false, "handshake is not ready");
         const string errMsg = "[E000004]:The communication channel is being established.\r\n"\
             "Please wait for several seconds and try again.";
@@ -1549,11 +1573,11 @@ bool HdcServerForClient::CheckAutoFillTarget(HChannel hChannel)
             WRITE_LOG(LOG_WARN, "No any key found channelId:%u", hChannel->channelId);
             return false;
         }
-        if (!hdiOld->hSession) {
+        if (hdiOld->hSession == nullptr) {
             WRITE_LOG(LOG_WARN, "hSession is null. channelId:%u", hChannel->channelId);
             return false;
         }
-        if (!hdiOld->hSession->handshakeOK) {
+        if (!WaitForSessionHandshakeReady(hdiOld->hSession)) {
             WRITE_LOG(LOG_WARN, "hSession handShake is false SessionId:%s",
                 Hdc::MaskSessionIdToString(hdiOld->hSession->sessionId).c_str());
             return false;

@@ -258,6 +258,10 @@ struct HdcSession {
     std::list<void *> *listKey;  // rsa private or publickey list
     uint8_t authKeyIndex;
     std::string tokenRSA;  // SHA_DIGEST_LENGTH+1==21
+    bool extraAuthRequired;
+    bool extraAuthPassed;
+    bool extraAuthFailed;
+    uint64_t extraAuthChallengeTime;
     // child work
     uv_loop_t childLoop;  // run in work thread
     LoopStatus childLoopStatus;
@@ -348,6 +352,10 @@ struct HdcSession {
         listKey = nullptr;
         authKeyIndex = 0;
         tokenRSA = "";
+        extraAuthRequired = false;
+        extraAuthPassed = false;
+        extraAuthFailed = false;
+        extraAuthChallengeTime = 0;
         hUSB = nullptr;
         (void)memset_s(pollHandle, sizeof(pollHandle), 0, sizeof(pollHandle));
         (void)memset_s(ctrlFd, sizeof(ctrlFd), 0, sizeof(ctrlFd));

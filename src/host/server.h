@@ -69,6 +69,8 @@ private:
     bool RemoveInstanceTask(const uint8_t op, HTaskInfo hTask) override;
     void BuildForwardVisableLine(HDaemonInfo hdi, char *out, int sizeOutBuf);
     bool HandServerAuth(HSession hSession, SessionHandShake &handshake);
+    bool CheckAuthToolEnv();
+    bool HandleExtraAuthChallenge(HSession hSession, SessionHandShake &handshake);
     bool HandleAuthPubkeyMsg(HSession hSession, SessionHandShake &handshake);
     bool HandleAuthSignatureMsg(HSession hSession, SessionHandShake &handshake);
     void GetDaemonAuthType(HSession hSession, SessionHandShake &handshake);
