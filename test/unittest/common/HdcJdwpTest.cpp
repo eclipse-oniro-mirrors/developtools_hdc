@@ -28,24 +28,19 @@ void HdcJdwpTest::TearDown() {}
 
 std::unique_ptr<HdcJdwp> HdcJdwpTest::InstanceHdcJdwp()
 {
-    uv_loop_t loopMain;
-    uv_loop_init(&loopMain);
-    LoopStatus ls(&loopMain, "not support");
-    // Base::SetLogLevel(Hdc::LOG_FULL);
-    return std::make_unique<HdcJdwp>(&loopMain, &ls);
+    return std::make_unique<HdcJdwp>(&loop, &loopStatus);
 }
 
 /*
  * @tc.name: TestInitial
- * @tc.desc: Check Initial return 0
+ * @tc.desc: Check Initial return ERR_MODULE_JDWP_FAILED when JdwpListen failed
  * @tc.type: FUNC
  */
 HWTEST_F(HdcJdwpTest, TestInitial, TestSize.Level1)
 {
-    EXPECT_CALL(mockJdwp, JdwpListen).WillOnce(Return(true));
-    EXPECT_EQ(mockJdwp.Initial(), 0);
-    EXPECT_GE(mockJdwp.pollNodeMap.size(), 0u);
-    mockJdwp.Stop();
+    EXPECT_CALL(mockJdwp, JdwpListen).WillOnce(Return(false));
+    EXPECT_EQ(mockJdwp.Initial(), ERR_MODULE_JDWP_FAILED);
+    EXPECT_TRUE(mockJdwp.pollNodeMap.empty());
 }
 
 /*
@@ -57,10 +52,11 @@ HWTEST_F(HdcJdwpTest, TestCreateJdwpTracker, TestSize.Level1)
 {
     EXPECT_FALSE(mockJdwp.CreateJdwpTracker(nullptr));
 
-    HTaskInfo hTaskInfo = new TaskInformation();
+    HTaskInfo hTaskInfo = new TaskInformation{};
     HdcSessionBase HdcSessionTest(false);
     hTaskInfo->ownerSessionClass = &HdcSessionTest;
     EXPECT_TRUE(mockJdwp.CreateJdwpTracker(hTaskInfo));
+    mockJdwp.RemoveJdwpTracker(hTaskInfo);
     delete hTaskInfo;
     mockJdwp.Stop();
 }
