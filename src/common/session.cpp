@@ -145,8 +145,13 @@ void HdcSessionBase::TaskClassDeleteRetry(uv_timer_t *handle)
         HdcStatisticReporter::GetInstance().IncrCommandInfo(STATISTIC_ITEM::FPORT_RM_COUNT);
     }
     
+    // taskCount is per-session: look the session up before hTask is freed.
+    // The childLoop timer can only fire while the session is still registered.
+    HSession hSession = thisClass->AdminSession(OP_QUERY, hTask->sessionId, nullptr);
     delete hTask;
-    thisClass->taskCount--;
+    if (hSession != nullptr) {
+        --hSession->taskCount;
+    }
     Base::TryCloseHandle((uv_handle_t *)handle, Base::CloseTimerCallback);
 }
 
@@ -186,7 +191,7 @@ void HdcSessionBase::ClearOwnTasks(HSession hSession, const uint32_t channelIDIn
     StartTraceScope("HdcSessionBase::ClearOwnTasks");
     std::lock_guard<std::mutex> lock(hSession->mapTaskMutex);
     map<uint32_t, HTaskInfo>::iterator iter;
-    taskCount = hSession->mapTask->size();
+    hSession->taskCount = hSession->mapTask->size();
     for (iter = hSession->mapTask->begin(); iter != hSession->mapTask->end();) {
         uint32_t channelId = iter->first;
         HTaskInfo hTask = iter->second;
@@ -826,6 +831,26 @@ HSession HdcSessionBase::VoteReset(const uint32_t sessionId)
     return hRet;
 }
 
+HSession HdcSessionBase::QuerySessionWithRef(const uint32_t sessionId)
+{
+    HSession hRet = nullptr;
+    uv_rwlock_wrlock(&lockMapSession);
+    if (mapSession.count(sessionId)) {
+        hRet = mapSession[sessionId];
+        // Reject dead session: the free flow never re-checks ref, a late
+        // reference acquired here would race with delete hSession (UAF)
+        if (hRet->isDead) {
+            WRITE_LOG(LOG_WARN, "OP_QUERY_REF session is dead, reject ref, sessionId:%s",
+                Hdc::MaskSessionIdToString(sessionId).c_str());
+            hRet = nullptr;
+        } else {
+            ++hRet->ref;
+        }
+    }
+    uv_rwlock_wrunlock(&lockMapSession);
+    return hRet;
+}
+
 HSession HdcSessionBase::AdminSession(const uint8_t op, const uint32_t sessionId, HSession hInput)
 {
     StartTraceScope("HdcSessionBase::AdminSession");
@@ -854,12 +879,7 @@ HSession HdcSessionBase::AdminSession(const uint8_t op, const uint32_t sessionId
 #endif
             break;
         case OP_QUERY_REF:
-            uv_rwlock_wrlock(&lockMapSession);
-            if (mapSession.count(sessionId)) {
-                hRet = mapSession[sessionId];
-                ++hRet->ref;
-            }
-            uv_rwlock_wrunlock(&lockMapSession);
+            hRet = QuerySessionWithRef(sessionId);
             break;
         case OP_UPDATE:
             uv_rwlock_wrlock(&lockMapSession);
@@ -1523,8 +1543,7 @@ void HdcSessionBase::ReChildLoopForSessionClear(HSession hSession)
     auto clearTaskForSessionFinish = [](uv_timer_t *handle) -> void {
         HSession hSession = (HSession)handle->data;
         hSession->clearTaskTimes++;
-        HdcSessionBase *thisClass = (HdcSessionBase *)hSession->classInstance;
-        if (thisClass->taskCount && (hSession->clearTaskTimes < 50)) {    //50: 50 * 120ms = 6s
+        if (hSession->taskCount && (hSession->clearTaskTimes < 50)) {    //50: 50 * 120ms = 6s
             return;
         }
         if (hSession->clearTaskTimes >= 50) {   //50: 50 * 120ms = 6s

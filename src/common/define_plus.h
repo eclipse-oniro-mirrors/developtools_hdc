@@ -234,7 +234,7 @@ struct HdcSessionStat {
 
 struct HdcSession {
     bool serverOrDaemon;  // instance of daemon or server, true is server, false is daemon
-    bool handshakeOK = false;     // Is an expected peer side
+    std::atomic<bool> handshakeOK = false;  // Is an expected peer side, polled cross-thread
     std::atomic<bool> isDead;
     bool voteReset;
     bool isCheck = false;
@@ -247,6 +247,7 @@ struct HdcSession {
     std::atomic<bool> childCleared;
     std::map<uint32_t, HTaskInfo> *mapTask;
     std::atomic<uint32_t> clearTaskTimes;
+    std::atomic<uint32_t> taskCount;  // per-session count of tasks pending removal
     // class ptr
     void *classInstance;  //  HdcSessionBase instance, HdcServer or HdcDaemon
     void *classModule;    //  Communicate module, TCP or USB instance,HdcDaemonUSB HdcDaemonTCP etc...
@@ -275,7 +276,7 @@ struct HdcSession {
     uv_os_sock_t fdChildWorkTCP;
     // usb handle
     HUSB hUSB;
-    bool sslHandshake = false;
+    std::atomic<bool> sslHandshake = false;  // read by Send() callers on multiple threads
     void *classSSL = nullptr;
 #ifdef HDC_SUPPORT_UART
     HUART hUART = nullptr;
@@ -294,7 +295,7 @@ struct HdcSession {
 
     HdcSessionStat stat;
 #ifdef HDC_HOST
-    bool isRunningOk;
+    std::atomic<bool> isRunningOk;  // written by IO threads, read by main/serving threads
     std::string faultInfo;
     std::mutex faultInfoMutex;
     std::string GetConnectionError()
@@ -302,7 +303,7 @@ struct HdcSession {
         std::lock_guard<std::mutex> lock(faultInfoMutex);
         return faultInfo;
     }
-    uint64_t commandCount = 0;
+    std::atomic<uint64_t> commandCount = 0;  // incremented from multiple threads
     std::string ToDisplayConnectionStr()
     {
         std::ostringstream oss;
@@ -310,12 +311,12 @@ struct HdcSession {
         oss << " sessionId:" << Hdc::MaskSessionIdToString(sessionId).c_str();
         oss << " connectKey:" << Hdc::MaskString(connectKey);
         oss << " connType:" << unsigned(connType);
-        oss << " connect state:" << isRunningOk;
+        oss << " connect state:" << isRunningOk.load();
         {
             std::lock_guard<std::mutex> lock(faultInfoMutex);
             oss << " faultInfo:" << faultInfo;
         }
-        oss << " commandCount:" << commandCount;
+        oss << " commandCount:" << commandCount.load();
         oss << " ]";
         return oss.str();
     }
@@ -326,7 +327,7 @@ struct HdcSession {
         oss << "HdcSession [";
         oss << " serverOrDaemon:" << serverOrDaemon;
         oss << " sessionId:" << Hdc::MaskSessionIdToString(sessionId).c_str();
-        oss << " handshakeOK:" << handshakeOK;
+        oss << " handshakeOK:" << handshakeOK.load();
         oss << " connectKey:" << Hdc::MaskString(connectKey);
         oss << " connType:" << unsigned(connType);
         oss << " ]";
@@ -344,6 +345,7 @@ struct HdcSession {
         uvChildRef = 0;
         mapTask = nullptr;
         clearTaskTimes = 0;
+        taskCount = 0;
         classInstance = nullptr;
         classModule = nullptr;
         bufSize = 0;
