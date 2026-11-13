@@ -15,7 +15,9 @@
 #ifndef HDC_JDWP_H
 #define HDC_JDWP_H
 #include "daemon_common.h"
+#include <atomic>
 #include <poll.h>
+#include <pthread.h>
 #include <unordered_map>
 namespace Hdc {
 
@@ -103,8 +105,9 @@ private:
     map<uint32_t, HCtxJdwp> mapCtxJdwp;
     std::unordered_map<int, PollNode> pollNodeMap;  // fd, PollNode
     std::vector<HTaskInfo> jdwpTrackers;
-    bool stop;
+    std::atomic<bool> stop;
     std::mutex mutex;
+    pthread_t pollThread;
 };
 } // namespace Hdc
 #endif

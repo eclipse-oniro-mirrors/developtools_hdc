@@ -113,11 +113,18 @@ HdcJdwp::HdcJdwp(uv_loop_t *loopIn, LoopStatus *ls) : loopStatus(ls)
     loopStatus = ls;
     refCount = 0;
     awakenPollFd = -1;
+    pollThread = 0;
     stop = false;
 }
 
 HdcJdwp::~HdcJdwp()
 {
+    stop = true;
+    if (pollThread != 0) {
+        WakePollThread();
+        pthread_join(pollThread, nullptr);
+        pollThread = 0;
+    }
     Base::CloseFd(awakenPollFd);
 }
 
@@ -553,7 +560,10 @@ size_t HdcJdwp::JdwpProcessListMsg(char *buffer, size_t bufferlen, uint8_t dr)
 #ifdef JS_JDWP_CONNECT
     string result = GetProcessListExtendPkgName(dr);
 #else
-    string result = GetProcessList();
+    string result;
+    for (auto &&v : mapCtxJdwp) {
+        result += std::to_string(v.first) + "\n";
+    }
 #endif // JS_JDWP_CONNECT
 
     size_t len = result.length();
@@ -613,6 +623,7 @@ void HdcJdwp::ProcessListUpdated(HTaskInfo task)
     }
     for (auto iter = jdwpTrackers.begin(); iter != jdwpTrackers.end();) {
         if (*iter == nullptr) {
+            iter = jdwpTrackers.erase(iter);
             continue;
         }
         // The channel for the track-jpid has been stopped.
@@ -686,10 +697,15 @@ void *HdcJdwp::FdEventPollThread(void *args)
 {
     auto thisClass = static_cast<HdcJdwp *>(args);
     std::vector<struct pollfd> pollfds;
-    size_t size = 0;
     while (!thisClass->stop) {
         thisClass->GetPollFd(pollfds);
-        poll(&pollfds[0], size, -1);
+        if (poll(&pollfds[0], pollfds.size(), -1) < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            WRITE_LOG(LOG_FATAL, "FdEventPollThread poll failed, errno:%d, exit thread", errno);
+            break;
+        }
         for (const auto &pollfdsing : pollfds) {
             // POLLNVAL:fd not open
             if ((static_cast<unsigned short>(pollfdsing.revents) & (POLLNVAL | POLLRDHUP | POLLHUP | POLLERR)) != 0) {
@@ -697,6 +713,7 @@ void *HdcJdwp::FdEventPollThread(void *args)
                 auto it = thisClass->pollNodeMap.find(pollfdsing.fd);
                 if (it != thisClass->pollNodeMap.end()) {
                     uint32_t targetPID = it->second.ppid;
+                    thisClass->pollNodeMap.erase(it);
                     HCtxJdwp ctx = static_cast<HCtxJdwp>(thisClass->AdminContext(OP_QUERY, targetPID, nullptr));
                     if (ctx != nullptr) {
                         thisClass->AdminContext(OP_REMOVE, targetPID, nullptr);
@@ -714,16 +731,16 @@ void *HdcJdwp::FdEventPollThread(void *args)
 
 int HdcJdwp::CreateFdEventPoll()
 {
-    pthread_t tid;
     Base::CloseFd(awakenPollFd);
     awakenPollFd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     if (awakenPollFd < 0) {
         WRITE_LOG(LOG_FATAL, "CreateFdEventPoll : Failed to create awakenPollFd");
         return ERR_GENERIC;
     }
-    int tret = pthread_create(&tid, nullptr, FdEventPollThread, this);
+    int tret = pthread_create(&pollThread, nullptr, FdEventPollThread, this);
     if (tret != 0) {
         WRITE_LOG(LOG_INFO, "FdEventPollThread create fail, errno:%d.", tret);
+        pollThread = 0;
         Base::CloseFd(awakenPollFd);
         awakenPollFd = -1;
         return tret;
@@ -751,10 +768,6 @@ int HdcJdwp::Initial()
 void HdcJdwp::GetPollFd(std::vector<struct pollfd>& pollfds)
 {
     std::unique_lock<std::mutex> lock(mutex);
-    if (pollfds.size() == pollNodeMap.size() || pollNodeMap.size() == 0) {
-        return;
-    }
-
     pollfds.clear();
     struct pollfd pollFd;
     for (const auto &pair : pollNodeMap) {
