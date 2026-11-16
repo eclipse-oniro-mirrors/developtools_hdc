@@ -399,7 +399,7 @@ inline bool HdcDaemonUnity::ListJdwpProcess(void *daemonIn)
     } else {
         result.erase(result.end() - 1);  // remove tail \n
     }
-    LogMsg(MSG_OK, result.c_str());
+    LogMsg(MSG_OK, "%s", result.c_str());
     return true;
 }
 
@@ -416,7 +416,7 @@ inline bool HdcDaemonUnity::TrackJdwpProcess(void *daemonIn, const string& param
     }
     if (!((static_cast<HdcJdwp *>(daemon->clsJdwp))->CreateJdwpTracker(taskInfo))) {
         string result = MESSAGE_FAIL;
-        LogMsg(MSG_OK, result.c_str());
+        LogMsg(MSG_OK, "%s", result.c_str());
         return false;
     }
     return true;

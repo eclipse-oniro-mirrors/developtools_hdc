@@ -875,7 +875,7 @@ static void EchoLog(string &buf)
         if (vfprintf(stdout, fmt, ap) > 0) {
             fprintf(stdout, "\n");
         }
-        WRITE_LOG(LOG_WARN, fmt);
+        WRITE_LOG(LOG_WARN, "%s", fmt);
         va_end(ap);
     }
 

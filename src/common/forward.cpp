@@ -1097,8 +1097,8 @@ Finish:
         if (!sError.size()) {
             LogMsg(MSG_FAIL, "Forward parament failed");
         } else {
-            LogMsg(MSG_FAIL, const_cast<char *>(sError.c_str()));
-            WRITE_LOG(LOG_WARN, const_cast<char *>(sError.c_str()));
+            LogMsg(MSG_FAIL, "%s", sError.c_str());
+            WRITE_LOG(LOG_WARN, "%s", sError.c_str());
         }
     }
     return ret;

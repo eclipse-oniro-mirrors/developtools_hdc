@@ -588,7 +588,7 @@ void HdcJdwp::SendProcessList(HTaskInfo t, string data)
         WRITE_LOG(LOG_FATAL, " SendProcessList, sessionbase is null.");
         return;
     }
-    sessionBase->LogMsg(t->sessionId, t->channelId, MSG_OK, data.c_str());
+    sessionBase->LogMsg(t->sessionId, t->channelId, MSG_OK, "%s", data.c_str());
 }
 
 void HdcJdwp::ProcessListUpdated(HTaskInfo task)

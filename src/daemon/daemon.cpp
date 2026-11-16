@@ -1294,7 +1294,7 @@ bool HdcDaemon::CheckAuthStatus(HSession hSession, const uint32_t channelId, con
         WRITE_LOG(LOG_WARN, "session %s auth failed: %s for command %u",
                   Hdc::MaskSessionIdToString(hSession->sessionId).c_str(), authmsg.c_str(), command);
         if (!authmsg.empty()) {
-            LogMsg(hSession->sessionId, channelId, MSG_FAIL, authmsg.c_str());
+            LogMsg(hSession->sessionId, channelId, MSG_FAIL, "%s", authmsg.c_str());
         }
         uint8_t count = 1;
         Send(hSession->sessionId, channelId, CMD_KERNEL_CHANNEL_CLOSE, &count, 1);
@@ -1407,7 +1407,7 @@ bool HdcDaemon::FetchCommand(HSession hSession, const uint32_t channelId, const 
     bool isNotIntercepted = CheckControl(command);
     if (!ReportCommandEvent(command, payload, payloadSize, !isNotIntercepted)) {
         std::string msg = "[E00C002]Execution intercepted due to inaccessibility of reporting command event.";
-        LogMsg(hSession->sessionId, channelId, MSG_FAIL, msg.c_str());
+        LogMsg(hSession->sessionId, channelId, MSG_FAIL, "%s", msg.c_str());
         return false;
     }
     bool ret = true;
@@ -1742,7 +1742,7 @@ void HdcDaemon::SendAuthEncryptPsk(SessionHandShake &handshake, const uint32_t c
 void HdcDaemon::HandleAuthFailed(SessionHandShake &handshake, uint32_t channelid, HSession hSession, string msg)
 {
     SendAuthOkMsg(handshake, channelid, hSession, msg, DAEOMN_UNAUTHORIZED);
-    LogMsg(hSession->sessionId, channelid, MSG_FAIL, msg.c_str());
+    LogMsg(hSession->sessionId, channelid, MSG_FAIL, "%s", msg.c_str());
     UpdateSessionAuthmsg(hSession->sessionId, msg);
 }
 void HdcDaemon::AuthRejectLowClient(SessionHandShake &handshake, uint32_t channelid, HSession hSession)

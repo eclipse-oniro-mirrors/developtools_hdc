@@ -1079,7 +1079,7 @@ void HdcServer::HandleKernelEcho(HChannel hChannel, HSession hSession, const uin
     HdcServerForClient *sfc = static_cast<HdcServerForClient *>(clsServerForClient);
     MessageLevel level = static_cast<MessageLevel>(*payload);
     string s(reinterpret_cast<char *>(payload + 1), payloadSize - 1);
-    sfc->EchoClient(hChannel, level, s.c_str());
+    sfc->EchoClient(hChannel, level, s);
     WRITE_LOG(LOG_INFO, "CMD_KERNEL_ECHO size:%d cid:%u sid:%s", payloadSize - 1, channelId,
         Hdc::MaskSessionIdToString(hSession->sessionId).c_str());
 }
