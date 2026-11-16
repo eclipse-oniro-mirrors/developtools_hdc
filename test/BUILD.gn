@@ -850,9 +850,34 @@ ohos_fuzztest("DecryptPayloadFuzzTest") {
   external_deps += [ "hilog:libhilog" ]
 }
 
+ohos_fuzztest("DaemonFetchCommandFuzzTest") {
+  module_out_path = FUZZ_OUTPUT_PATH
+  fuzz_config_file = "${hdc_path}/test/fuzztest/daemonfetchcommand_fuzzer"
+  configs = [ ":hdc_daemon_common_config" ]
+  cflags = fuzz_cflags
+
+  # Must match what :hdc_daemon was compiled with, HARMONY_PROJECT changes
+  # SystemDepend::GetDevItem() and therefore CheckControl()'s behaviour.
+  defines = [
+    "HARMONY_PROJECT",
+    "MEMORY_POOL_ENABLE",
+    "OPENSSL_SUPPRESS_DEPRECATED",
+  ]
+  sources = [ "fuzztest/daemonfetchcommand_fuzzer/DaemonFetchCommand_fuzzer.cpp" ]
+  deps = [ ":hdc_daemon" ]
+  subsystem_name = "developtools"
+  part_name = "hdc"
+  external_deps = common_external_deps
+  external_deps += [
+    "c_utils:utils",
+    "init:libbeget_proxy",
+  ]
+}
+
 group("hdc_fuzztest") {
   testonly = true
   deps = [
+    ":DaemonFetchCommandFuzzTest",
     ":DecryptPayloadFuzzTest",
     ":ForwardCmdDispatchFuzzTest",
     ":ForwardReadStreamFuzzTest",
