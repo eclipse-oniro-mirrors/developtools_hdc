@@ -104,7 +104,7 @@ bool Decompress::CheckPath(std::string decPath)
         std::string estr;
         bool b = Base::TryCreateDirectory(decPath, estr);
         if (!b) {
-            LogFatal("mkdir failed decPath:%s estr:%s", decPath);
+            LogFatal("mkdir failed decPath:%s", decPath);
             return false;
         }
     }
