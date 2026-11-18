@@ -104,7 +104,7 @@ void HdcTaskBase::LogMsg(MessageLevel level, const char *msg, ...)
         fflush(stdout);
     } else {
         HdcSessionBase *sessionBase = reinterpret_cast<HdcSessionBase *>(clsSession);
-        sessionBase->LogMsg(taskInfo->sessionId, taskInfo->channelId, level, log.c_str());
+        sessionBase->LogMsg(taskInfo->sessionId, taskInfo->channelId, level, "%s", log.c_str());
     }
 }
 

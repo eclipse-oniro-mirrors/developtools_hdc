@@ -631,10 +631,10 @@ bool HdcServerForClient::OnConnectTargetSuccess(HChannel hChannel, HDaemonInfo h
     if (hChannel->isCheck) {
         WRITE_LOG(LOG_INFO, "check device success and remove %s", Hdc::MaskString(hChannel->key).c_str());
         CommandRemoveSession(hChannel, hChannel->key.c_str());
-        EchoClient(hChannel, MSG_OK, const_cast<char *>(hdi->version.c_str()));
+        EchoClient(hChannel, MSG_OK, "%s", hdi->version.c_str());
     } else {
         sRet = "Connect OK";
-        EchoClient(hChannel, MSG_OK, const_cast<char *>(sRet.c_str()));
+        EchoClient(hChannel, MSG_OK, "%s", sRet.c_str());
     }
     return true;
 }
@@ -724,7 +724,7 @@ bool HdcServerForClient::CommandReconnectTarget(HChannel hChannel, const char *c
         ptrServer->clsUSBClt->AllowUsbNodeRescan(usbMountPoint);
     }
     string msg = "Reconnecting " + key + " ...";
-    EchoClient(hChannel, MSG_OK, msg.c_str());
+    EchoClient(hChannel, MSG_OK, "%s", msg.c_str());
     WRITE_LOG(LOG_INFO, "CommandReconnectTarget key:%s mount:%s",
               Hdc::MaskString(key).c_str(), usbMountPoint.c_str());
     return true;
@@ -1463,7 +1463,7 @@ HSession HdcServerForClient::FindAliveSessionFromDaemonMap(const HChannel hChann
         FillChannelResult(hChannel, false, "handshake is not ready");
         const string errMsg = "[E000004]:The communication channel is being established.\r\n"\
             "Please wait for several seconds and try again.";
-        EchoClient(hChannel, MSG_FAIL, errMsg.c_str());
+        EchoClient(hChannel, MSG_FAIL, "%s", errMsg.c_str());
         return nullptr;
     }
     hSession = reinterpret_cast<HSession>(hdi->hSession);
@@ -1691,7 +1691,7 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
     HdcServer *ptrServer = (HdcServer *)clsServer;
     ptrServer->AdminDaemonMap(OP_QUERY, hChannel->connectKey, hdi);
     if (hdi && !hdi->emgmsg.empty()) {
-        EchoClient(hChannel, MSG_FAIL, hdi->emgmsg.c_str());
+        EchoClient(hChannel, MSG_FAIL, "%s", hdi->emgmsg.c_str());
         return ERR_GENERIC;
     }
     uint16_t command = *reinterpret_cast<uint16_t *>(bufPtr);
@@ -1706,9 +1706,9 @@ int HdcServerForClient::ReadChannel(HChannel hChannel, uint8_t *bufPtr, const in
                 CMDSTR_SOFTWARE_HELP.size()) ||
                 !strcmp(reinterpret_cast<char *>(bufPtr), CMDSTR_SOFTWARE_VERSION.c_str()) ||
                 !strcmp(reinterpret_cast<char *>(bufPtr), "flash")) {
-                EchoClient(hChannel, MSG_OK, retEcho.c_str());
+                EchoClient(hChannel, MSG_OK, "%s", retEcho.c_str());
             } else {
-                EchoClient(hChannel, MSG_FAIL, retEcho.c_str());
+                EchoClient(hChannel, MSG_FAIL, "%s", retEcho.c_str());
             }
         }
 
