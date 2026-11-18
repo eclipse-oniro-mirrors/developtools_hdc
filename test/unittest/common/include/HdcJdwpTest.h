@@ -14,6 +14,7 @@
  */
 
 #ifndef HDC_JDWP_TEST_H
+#define HDC_JDWP_TEST_H
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "jdwp.h"
