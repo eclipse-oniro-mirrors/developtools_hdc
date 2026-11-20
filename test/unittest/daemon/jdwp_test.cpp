@@ -338,7 +338,9 @@ HWTEST_F(HdcJdwpTest, GetPollFd_EmptyMap, TestSize.Level0)
 {
     std::vector<struct pollfd> pollfds;
     EXPECT_NO_FATAL_FAILURE(jdwp->GetPollFd(pollfds));
-    EXPECT_TRUE(pollfds.empty());
+    ASSERT_EQ(pollfds.size(), 1u);
+    EXPECT_EQ(pollfds[0].fd, -1);
+    EXPECT_EQ(pollfds[0].events, POLLIN);
 }
 
 } // namespace Hdc
