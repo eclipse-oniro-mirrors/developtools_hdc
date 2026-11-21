@@ -116,26 +116,28 @@ static void UsbLogHandler(libusb_context* ctx, enum libusb_log_level level, cons
 
 libusb_log_level HdcHostUSB::GetLibusbLogLevel(void)
 {
-    return GetLibusbLogLevel(Base::GetLogLevel());
-}
+    libusb_log_level debugLevel;
 
-libusb_log_level HdcHostUSB::GetLibusbLogLevel(uint8_t logLevel)
-{
-    switch (static_cast<Hdc::HdcLogLevel>(logLevel)) {
-        case LOG_FATAL:
-            return LIBUSB_LOG_LEVEL_ERROR;
+    switch (static_cast<Hdc::HdcLogLevel>(Base::GetLogLevel())) {
         case LOG_WARN:
-            return LIBUSB_LOG_LEVEL_WARNING;
+            debugLevel = LIBUSB_LOG_LEVEL_ERROR;
+            break;
         case LOG_INFO:
-            return LIBUSB_LOG_LEVEL_INFO;
+            debugLevel = LIBUSB_LOG_LEVEL_WARNING;
+            break;
         case LOG_DEBUG:
-        case LOG_ALL:
+            debugLevel = LIBUSB_LOG_LEVEL_INFO;
+            break;
         case LOG_VERBOSE:
-            return LIBUSB_LOG_LEVEL_DEBUG;
-        case LOG_OFF:
+            debugLevel = LIBUSB_LOG_LEVEL_DEBUG;
+            break;
+        case LOG_FATAL:
+            // pass through to no libusb logging
         default:
-            return LIBUSB_LOG_LEVEL_NONE;
+            debugLevel = LIBUSB_LOG_LEVEL_NONE;
+            break;
     }
+    return debugLevel;
 }
  
 int HdcHostUSB::SetLibusbLogLevel(void)
