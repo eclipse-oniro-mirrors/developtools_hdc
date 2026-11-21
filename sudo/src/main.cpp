@@ -14,53 +14,238 @@
 */
 
 #include <termios.h>
+#include <cstdarg>
 #include <climits>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <string>
+#include <vector>
+#include <unordered_map>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <securec.h>
 #include <unistd.h>
 
+#include "sudoer_plugin.h"
+
 #if defined(SURPPORT_SELINUX)
 #include "selinux/selinux.h"
 #endif
 #include "os_account_manager.h"
-#include "user_auth_client.h"
-#include "pinauth_register.h"
-#include "user_access_ctrl_client.h"
-#include "aclmgr_system_api.h"
-#include "locale_config.h"
-#include "locale_matcher.h"
 #include "parameters.h"
 
-using namespace OHOS::UserIam;
 using namespace OHOS::AccountSA;
-using namespace OHOS::UserIam::UserAuth;
 using namespace OHOS::system;
 
 namespace {
 static const int SUDO_ARG_MAX_NUMS = 4096;
-static const int CHALLENGE_LEN = 32;
 static const std::vector<std::string> DEFAULT_PATH = {"/usr/bin", "/bin", "/system/bin", "/vendor/bin",
     "/usr/local/bin", "/data/app/bin", "/data/service/hnp/bin", "/opt/homebrew"};
 static const char *DEFAULT_BASH = "/system/bin/sh";
-static FILE *g_ttyFp = nullptr;
+
+static void WriteStdErr(const char *str)
+{
+    (void)fwrite(str, 1, strlen(str), stderr);
+    fflush(stderr);
+}
+
+// --- TtySession RAII (TASK-8, AD-03): encapsulates g_ttyFp lifecycle ---
+class TtySession {
+public:
+    void Write(const char *str)
+    {
+        if (str == nullptr) {
+            return;
+        }
+        if (fp_ != nullptr) {
+            (void)fwrite(str, 1, strlen(str), fp_);
+            fflush(fp_);
+            return;
+        }
+        fp_ = fopen("/dev/tty", "w");
+        if (fp_ != nullptr) {
+            (void)fwrite(str, 1, strlen(str), fp_);
+            fflush(fp_);
+            return;
+        }
+        WriteStdErr(str);
+    }
+
+    // Read a line from /dev/tty with ECHO off (termios), for PIN input (TASK-4)
+    bool ReadNoEcho(char *buf, size_t bufLen)
+    {
+        if (buf == nullptr || bufLen == 0) {
+            return false;
+        }
+        EnsureOpenRead();
+        if (ttyRd_ == nullptr) {
+            return false;
+        }
+        struct termios oldTermios;
+        struct termios newTermios;
+        if (tcgetattr(fileno(ttyRd_), &oldTermios) != 0) {
+            return false;
+        }
+        newTermios = oldTermios;
+        newTermios.c_lflag &= ~(ECHO | ECHONL);
+        if (tcsetattr(fileno(ttyRd_), TCSANOW, &newTermios) != 0) {
+            return false;
+        }
+        char *result = fgets(buf, static_cast<int>(bufLen), ttyRd_);
+        (void)tcsetattr(fileno(ttyRd_), TCSANOW, &oldTermios);
+        // strip trailing newline
+        if (result != nullptr) {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n') {
+                buf[len - 1] = '\0';
+            }
+            return true;
+        }
+        (void)memset_s(buf, bufLen, 0, bufLen);
+        return false;
+    }
+
+    void Close()
+    {
+        if (fp_ != nullptr) {
+            fclose(fp_);
+            fp_ = nullptr;
+        }
+        if (ttyRd_ != nullptr) {
+            fclose(ttyRd_);
+            ttyRd_ = nullptr;
+        }
+    }
+
+    ~TtySession()
+    {
+        Close();
+    }
+
+private:
+    void EnsureOpenRead()
+    {
+        if (ttyRd_ == nullptr) {
+            ttyRd_ = fopen("/dev/tty", "r");
+        }
+    }
+
+    FILE *fp_ = nullptr;
+    FILE *ttyRd_ = nullptr;
+};
+
+/*
+ * Conversation context passed as userdata to SudoerConvFn.
+ * Tracks TTY session and PIN authentication outcome for error code mapping.
+ */
+struct SudoerConvContext {
+    TtySession *tty;
+    bool pinFailed;
+};
+
+static SudoerConvContext g_convCtx = {nullptr, false};
+
+/*
+ * Handle one conversation message: display text and/or read PIN.
+ * For PIN prompts, mallocs a buffer, reads into it, assigns reply->reply;
+ * on failure scrubs and frees it. Returns 0 on success, -1 on failure.
+ */
+static int HandleConvMessage(SudoerConvContext *ctx, const SudoerConvMessage &msg,
+                             SudoerConvReply *reply)
+{
+    if (msg.msg != nullptr) {
+        ctx->tty->Write(msg.msg);
+    }
+    if (msg.msgType == SUDOER_CONV_PROMPT_ECHO_OFF) {
+        char *pinBuf = static_cast<char *>(malloc(PIN_MAX_LEN));
+        if (pinBuf == nullptr) {
+            return -1;
+        }
+        (void)memset_s(pinBuf, PIN_MAX_LEN, 0, PIN_MAX_LEN);
+        if (!ctx->tty->ReadNoEcho(pinBuf, PIN_MAX_LEN)) {
+            (void)memset_s(pinBuf, PIN_MAX_LEN, 0, PIN_MAX_LEN);
+            free(pinBuf);
+            return -1;
+        }
+        reply->reply = pinBuf;
+        ctx->tty->Write("\n");
+    }
+    return 0;
+}
+
+/*
+ * Scrub and free non-null reply buffers on SudoConv failure to prevent
+ * PIN leakage and double-free.
+ */
+static void ScrubReplies(SudoerConvReply *replies, int count)
+{
+    for (int j = 0; j < count; j++) {
+        if (replies[j].reply != nullptr) {
+            (void)memset_s(replies[j].reply, PIN_MAX_LEN, 0, PIN_MAX_LEN);
+            free(replies[j].reply);
+            replies[j].reply = nullptr;
+        }
+    }
+}
+
+/*
+ * SudoConv callback: libsudoer calls this during policy check to prompt for
+ * PIN. On failure, scrubs all filled replies (left all-nullptr) via
+ * ScrubReplies to prevent PIN leakage.
+ */
+static int SudoConv(int numMsgs, const SudoerConvMessage *msgs, SudoerConvReply *replies,
+                    void *userdata) noexcept
+{
+    if (msgs == nullptr || replies == nullptr || numMsgs <= 0) {
+        return -1;
+    }
+    SudoerConvContext *ctx = static_cast<SudoerConvContext *>(userdata);
+    if (ctx == nullptr) {
+        ctx = &g_convCtx;
+    }
+    if (ctx->tty == nullptr) {
+        return -1;
+    }
+    for (int i = 0; i < numMsgs; i++) {
+        if (HandleConvMessage(ctx, msgs[i], &replies[i]) != 0) {
+            ctx->pinFailed = true;
+            ScrubReplies(replies, i + 1);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+// --- Gate checks (TASK-1, TASK-5) ---
+static bool IsTtyMode()
+{
+    return isatty(STDIN_FILENO) == 1;
+}
+
 static const char *OUT_OF_MEM = "[E0001] out of memory\n";
 static const char *COMMAND_NOT_FOUND = "[E0002] command not found\n";
 static const char *USER_VERIFY_FAILED = "[E0003] Sorry, try again. If screen lock password not set, set it first.\n";
 static const char *USER_SWITCH_FAILED = "[E0004] Currently logged-in user has switched, please try again.\n";
+static const char *TTY_REQUIRED = "[E0005] sudo must be run in a terminal (tty).\n";
+static const char *POLICY_LOAD_FAILED = "[E0006] failed to load sudoer policy plugin.\n";
+static const char *POLICY_DENIED = "[E0008] sudoer policy check denied.\n";
+static const char *PIN_FAILED = "[E0009] command line PIN authentication failed.\n";
 static const char *HELP = "sudo - execute command or script as root\n\n"
                        "usage: sudo command ...\n";
+
+// Print buffer size for SudoerPrintFn callback
+static const int PRINT_BUF_SIZE = 1024;
+// User info string buffer for sudoer_policy_open
+static const int USER_INFO_BUF_SIZE = 256;
+
+// Minimum argc for a valid sudo invocation (program name + command)
+static const int MIN_ARGC = 2;
+
 static int32_t g_userId = -1;
-static std::vector<uint8_t> g_challenge(CHALLENGE_LEN, 0);
-static std::vector<uint8_t> g_authToken = {0};
-static const std::string CONSTRAINT_SUDO = "constraint.sudo";
 
 static std::vector<std::string> envSnapshot;
-
-std::atomic<bool> g_authFinish = false;
 
 /*
  * Default table of "bad" variables to remove from the environment.
@@ -136,40 +321,42 @@ enum class CmdType : int32_t {
 
 }
 
-static void WriteStdErr(const char *str)
-{
-    (void)fwrite(str, 1, strlen(str), stderr);
-    fflush(stderr);
-}
-
 static void WriteStdErrFmtWithStr(const std::string& format, const std::string& error)
 {
     fprintf(stderr, format.c_str(), error.c_str());
     fflush(stderr);
 }
 
-static void WriteTty(const char *str)
+/*
+ * SudoerPrintFn callback: libsudoer calls this for informational/error
+ * messages; formats printf-style and writes to stderr.
+ */
+static int SudoerPrint(int msgType, const char *fmt, ...) noexcept
 {
-    if (g_ttyFp != nullptr) {
-        (void)fwrite(str, 1, strlen(str), g_ttyFp);
-        fflush(g_ttyFp);
-    } else {
-        g_ttyFp = fopen("/dev/tty", "w");
-        if (g_ttyFp != nullptr) {
-            (void)fwrite(str, 1, strlen(str), g_ttyFp);
-            fflush(g_ttyFp);
-            return;
-        }
-        WriteStdErr("open /dev/tty for write failed\n");
+    (void)msgType;
+    if (fmt == nullptr) {
+        return 0;
     }
+    char buf[PRINT_BUF_SIZE];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf_s(buf, sizeof(buf), sizeof(buf) - 1, fmt, ap);
+    va_end(ap);
+    if (n > 0) {
+        WriteStdErr(buf);
+    }
+    return n;
 }
 
-static void CloseTty(void)
+static TtySession *g_ttySession = nullptr;  // set by main(), used by legacy WriteTty/CloseTty
+
+static void WriteTty(const char *str)
 {
-    if (g_ttyFp != nullptr) {
-        fclose(g_ttyFp);
+    if (g_ttySession != nullptr) {
+        g_ttySession->Write(str);
+    } else {
+        WriteStdErr(str);
     }
-    g_ttyFp = nullptr;
 }
 
 static char *StrDup(const char *str)
@@ -404,29 +591,6 @@ static bool SetUidGid(void)
     return true;
 }
 
-static void PrintAclMgrError(int32_t errorCode)
-{
-    switch (static_cast<AclMgrResultCode>(errorCode)) {
-        case AclMgrResultCode::SEC_USERID_CONSTRAINED_ERROR:
-            WriteStdErr("no permission.\n");
-            break;
-        case AclMgrResultCode::SEC_PERMISSION_DENIED:
-            WriteStdErr("current user is not an administrator, please try again using an administrator account.\n");
-            break;
-        case AclMgrResultCode::SEC_USER_VERIFY_FAILED:
-            WriteStdErr(USER_VERIFY_FAILED);
-            break;
-        case AclMgrResultCode::SEC_FOREGROUND_CHECK_ERROR:
-            WriteStdErr(USER_SWITCH_FAILED);
-            break;
-        case AclMgrResultCode::SEC_SUDO_DISABLED:
-            WriteStdErr("The function is controlled and managed by your organization.\n");
-            break;
-        default:
-            WriteStdErr("set psl fail.\n");
-    }
-}
-
 static int32_t GetUserId()
 {
     std::vector<int32_t> ids;
@@ -443,33 +607,27 @@ static int32_t GetUserId()
     return ids[0];
 }
 
-static std::string GetLocalizedTitle()
+// Map error code string to the predefined message constant.
+static void WriteLocalizedError(TtySession &tty, const char *errorCode)
 {
-    std::string currentLang = OHOS::Global::I18n::LocaleConfig::GetSimplifiedSystemLanguage();
-    if (currentLang.empty()) {
-        return "Required to authorize a sudo command.";
-    }
-    std::unordered_map<std::string, std::string> TITLE_MAP = {
-        {"zh-CN", "允许执行 sudo 命令"},
-        {"en-US", "Required to authorize a sudo command."},
-        {"zh-HK", "允許執行 sudo 命令"},
-        {"zh-TW", "允許執行 sudo 命令"},
-        {"bo-CN", "sudo བཀའ་བརྡ་ལག་བསྟར་བྱ་ཆོག་པ།"},
-        {"ug-CN", "\u200Fsudo بۇيرۇقى يۈرگۈزۈشكە رۇخسەت قىلىنىدۇ."}
+    static const std::unordered_map<std::string, const char *> ERROR_MAP = {
+        {"E0003", USER_VERIFY_FAILED},
+        {"E0005", TTY_REQUIRED},
+        {"E0006", POLICY_LOAD_FAILED},
+        {"E0008", POLICY_DENIED},
+        {"E0009", PIN_FAILED},
     };
-
-    std::vector<std::string> candidateLocales = {"zh-CN", "en-US", "zh-HK", "zh-TW", "bo-CN", "ug-CN"};
-
-    std::string matchedLocale = OHOS::Global::I18n::LocaleMatcher::GetBestMatchedLocale(currentLang, candidateLocales);
-    if (matchedLocale.empty()) {
-        return "Required to authorize a sudo command.";
+    auto it = ERROR_MAP.find(errorCode);
+    if (it != ERROR_MAP.end()) {
+        tty.Write(it->second);
+        return;
     }
-
-    auto it = TITLE_MAP.find(matchedLocale);
-    if (it != TITLE_MAP.end()) {
-        return it->second;
+    // Not a mapped code: print verbatim (e.g. plugin errstr), ensure trailing newline.
+    size_t len = strlen(errorCode);
+    tty.Write(errorCode);
+    if (len == 0 || errorCode[len - 1] != '\n') {
+        tty.Write("\n");
     }
-    return "Required to authorize a sudo command.";
 }
 
 static bool UpdateEnvironmentPath()
@@ -703,98 +861,179 @@ static bool UpdateEnv()
     return true;
 }
 
-static bool Verify()
-{
-    g_authFinish.store(false);
-    struct CallBackContext {
-        std::mutex mtx;
-        std::condition_variable condition;
-        int32_t authResult = 0;
-    };
-    CallBackContext callbackCtx;
-    AclMgrCommandCallback callback = [](int32_t retCode, void* data) {
-        if (data == nullptr) {
-            WriteStdErr("data is nullptr\n");
-            return;
-        }
-        if (!g_authFinish.load()) {
-            CallBackContext* ctx = static_cast<CallBackContext*>(data);
-            ctx->authResult = retCode;
-            g_authFinish.store(true);
-            std::unique_lock<std::mutex> lock(ctx->mtx);
-            ctx->condition.notify_one();
-        }
-    };
-    int32_t res = SetProcessLevelByCommand(g_userId, GetLocalizedTitle().c_str(), callback, &callbackCtx);
-    if (res != static_cast<int32_t>(AclMgrResultCode::ACLMGR_SUCCESS)) {
-        g_authFinish.store(true);
-        WriteStdErrFmtWithStr("SetProcessLevelByCommand failed ret=%s\n", std::to_string(res));
-        return false;
-    }
-    std::unique_lock<std::mutex> lock(callbackCtx.mtx);
-    callbackCtx.condition.wait(lock, [&callbackCtx] { return g_authFinish.load(); });
-    if (callbackCtx.authResult != static_cast<int32_t>(AclMgrResultCode::ACLMGR_SUCCESS)) {
-        PrintAclMgrError(callbackCtx.authResult);
-        return false;
-    }
-    return true;
-}
-
 static bool IsPcMode()
 {
     return GetParameter("settings.sceneboard.ispcmode", "true") == "true";
 }
 
+/*
+ * Check preconditions after TtySession is created: TTY mode, minor mode,
+ * env path, user ID, argc. Returns true if all pass.
+ */
+static bool CheckGates(TtySession &ttySession, int argc)
+{
+    if (!IsTtyMode()) {
+        WriteLocalizedError(ttySession, "E0005");
+        return false;
+    }
+    if (!UpdateEnvironmentPath()) {
+        return false;
+    }
+    g_userId = GetUserId();
+    if (g_userId == -1) {
+        return false;
+    }
+    if (argc < MIN_ARGC) {
+        ttySession.Write(HELP);
+        return false;
+    }
+    return true;
+}
+
+/*
+ * Build userInfo for sudoer_policy_open: NUL-separated key=value pairs with
+ * double-NUL terminator. Keys: user_id, gid, pid, ppid, sid, tty.
+ */
+static bool BuildUserInfo(char *buf, size_t bufSize)
+{
+    size_t off = 0;
+    /*
+     * Local helper: append one "key=int\0" entry, advancing off.
+     */
+    auto appendInt = [&buf, &bufSize, &off](const char *key, int val) -> bool {
+        int n = snprintf_s(buf + off, bufSize - off, bufSize - off - 1,
+                           "%s=%d", key, val);
+        if (n < 0) {
+            return false;
+        }
+        off += static_cast<size_t>(n) + 1;
+        return true;
+    };
+    if (!appendInt("user_id", static_cast<int>(g_userId)) ||
+        !appendInt("gid", static_cast<int>(getgid())) ||
+        !appendInt("pid", static_cast<int>(getpid())) ||
+        !appendInt("ppid", static_cast<int>(getppid())) ||
+        !appendInt("sid", static_cast<int>(getsid(0)))) {
+        return false;
+    }
+    const char *ttyName = ttyname(STDIN_FILENO);
+    if (ttyName != nullptr) {
+        int n = snprintf_s(buf + off, bufSize - off, bufSize - off - 1,
+                           "tty=%s", ttyName);
+        if (n < 0) {
+            return false;
+        }
+        off += static_cast<size_t>(n) + 1;
+    }
+    if (off >= bufSize) {
+        return false;
+    }
+    buf[off] = '\0';  // second NUL: list terminator
+    return true;
+}
+
+/*
+ * Run policy plugin: Load, Open, Check. Returns nullptr on success, or an
+ * error string on failure (plugin errstr if non-empty, else mapped E000x).
+ */
+static const char *RunPolicyCheck(SudoerPlugin &plugin, TtySession &ttySession,
+                                  char **argvNew)
+{
+    if (!plugin.Load()) {
+        return "E0006";
+    }
+    g_convCtx.tty = &ttySession;
+    g_convCtx.pinFailed = false;
+    char userInfo[USER_INFO_BUF_SIZE];
+    if (!BuildUserInfo(userInfo, sizeof(userInfo))) {
+        return "E0006";
+    }
+    SudoerOpenParams openParams = {SUDOER_API_VERSION, SudoConv, SudoerPrint,
+                                   "", userInfo, "", ""};
+    const char *errstr = nullptr;
+    if (plugin.Open(openParams, &errstr) != SUDOER_RESULT_OK) {
+        return (errstr != nullptr && errstr[0] != '\0') ? errstr : "E0006";
+    }
+    int newArgc = 0;
+    while (argvNew[newArgc] != nullptr) {
+        ++newArgc;
+    }
+    SudoerCheckResult result;
+    int checkRet = plugin.Check(newArgc, argvNew, nullptr, result, &errstr);
+    if (checkRet == SUDOER_RESULT_OK) {
+        return nullptr;
+    }
+    if (errstr != nullptr && errstr[0] != '\0') {
+        return errstr;
+    }
+    if (g_convCtx.pinFailed) {
+        return "E0009";
+    }
+    return (checkRet == SUDOER_RESULT_FAIL) ? "E0008" : "E0003";
+}
+
+/*
+ * Execute command as root after policy approval: SELinux, UpdateEnv, execvp.
+ * Does not return on success.
+ */
+static int ExecPrivileged(char **argvNew)
+{
+#if defined(SURPPORT_SELINUX)
+    if (setcon("u:r:sudo_execv_label:s0") != 0) {
+        WriteStdErr("set SEHarmony label failed\n");
+        FreeArgvNew(argvNew);
+        return 1;
+    }
+#endif
+    if (!UpdateEnv()) {
+        WriteStdErr("UpdateEnv failed\n");
+        FreeArgvNew(argvNew);
+        return 1;
+    }
+    execvp(argvNew[0], argvNew);
+    WriteStdErr("execvp failed\n");
+    FreeArgvNew(argvNew);
+    return 1;
+}
+
+/*
+ * Main flow: IsPcMode → isatty(E0005) → UpdateEnvPath → GetUserId →
+ * argc(HELP) → ParseCmd(E0002) → SetUidGid(E0004) → PolicyPlugin →
+ * Close → SELinux → UpdateEnv → execvp.
+ */
 int main(int argc, char* argv[])
 {
     if (!IsPcMode()) {
         WriteStdErr("sudo is only supported in PC mode.\n");
         return 1;
     }
-
-    if (!UpdateEnvironmentPath()) {
+    TtySession ttySession;
+    g_ttySession = &ttySession;
+    if (!CheckGates(ttySession, argc)) {
+        g_ttySession = nullptr;
         return 1;
     }
-
-    g_userId = GetUserId();
-    if (g_userId == -1) {
-        WriteStdErr("get user id failed.\n");
-        return 1;
-    }
-
-    if (argc < 2) { // 2:argc check number
-        WriteStdErr(HELP);
-        return 1;
-    }
-
-    if (!Verify()) {
-        return 1;
-    }
-
     char **argvNew = ParseCmd(argc, argv);
-    CloseTty();
     if (argvNew == nullptr) {
+        g_ttySession = nullptr;
         return 1;
     }
-
     if (!SetUidGid()) {
+        WriteStdErr(USER_SWITCH_FAILED);
         FreeArgvNew(argvNew);
-        WriteStdErr("setuid failed\n");
+        g_ttySession = nullptr;
         return 1;
     }
-
-#if defined(SURPPORT_SELINUX)
-    if (setcon("u:r:sudo_execv_label:s0") != 0) {
-        WriteStdErr("set SEHarmony label failed\n");
+    SudoerPlugin plugin;
+    const char *policyErr = RunPolicyCheck(plugin, ttySession, argvNew);
+    if (policyErr != nullptr) {
+        WriteLocalizedError(ttySession, policyErr);
+        FreeArgvNew(argvNew);
+        g_ttySession = nullptr;
         return 1;
     }
-#endif
-
-    if (!UpdateEnv()) {
-        WriteStdErr("UpdateEnv failed\n");
-        return 1;
-    }
-    execvp(argvNew[0], argvNew);
-    WriteStdErr("execvp failed\n");
-    return 1;
+    plugin.Close(0, 0);
+    ttySession.Close();
+    g_ttySession = nullptr;
+    return ExecPrivileged(argvNew);
 }
