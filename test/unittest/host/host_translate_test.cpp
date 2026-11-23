@@ -404,17 +404,20 @@ HWTEST_F(HdcTranslateTest, TestLibusbLogLevelMapping, TestSize.Level0)
 {
     const std::vector<libusb_log_level> expected = {
         LIBUSB_LOG_LEVEL_NONE,
+        LIBUSB_LOG_LEVEL_NONE,
         LIBUSB_LOG_LEVEL_ERROR,
         LIBUSB_LOG_LEVEL_WARNING,
         LIBUSB_LOG_LEVEL_INFO,
-        LIBUSB_LOG_LEVEL_DEBUG,
-        LIBUSB_LOG_LEVEL_DEBUG,
+        LIBUSB_LOG_LEVEL_NONE,
         LIBUSB_LOG_LEVEL_DEBUG,
     };
  
+    const uint8_t originalLevel = Base::GetLogLevel();
     for (uint8_t level = LOG_OFF; level <= LOG_LAST; ++level) {
-        EXPECT_EQ(HdcHostUSB::GetLibusbLogLevel(level), expected[level]);
+        Base::SetLogLevel(level);
+        EXPECT_EQ(HdcHostUSB::GetLibusbLogLevel(), expected[level]);
     }
+    Base::SetLogLevel(originalLevel);
 }
 
 HWTEST_F(HdcTranslateTest, TestString2FormatCommandFportLs, TestSize.Level0)

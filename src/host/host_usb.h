@@ -41,7 +41,6 @@ public:
     HSession ConnectDetectDaemon(const HSession hSession, const HDaemonInfo pdi);
     void Stop();
     static libusb_log_level GetLibusbLogLevel(void);
-    static libusb_log_level GetLibusbLogLevel(uint8_t logLevel);
     int SetLibusbLogLevel(void);
     void SendSoftResetToDaemon(HSession hSession, uint32_t sessionIdOld);
     static void WatchUsbNodeChange(HdcHostUSB *thisClass);
