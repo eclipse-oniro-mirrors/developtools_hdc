@@ -51,7 +51,7 @@ inline const char *GetConnectionErrorInfo(uint8_t connType)
 }
 #endif
 
-static string MaskString(const string &str)
+inline string MaskString(const string &str)
 {
     if (str.empty()) {
         return str;

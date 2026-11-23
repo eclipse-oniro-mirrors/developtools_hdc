@@ -47,6 +47,21 @@
 using namespace std::chrono;
 
 namespace Hdc {
+const string IPV4_MAPPING_PREFIX = "::ffff:";
+const string UT_TMP_PATH = "/tmp/hdc-ut";
+const string SERVER_NAME = "HDCServer";
+const string STRING_EMPTY = "";
+const string HANDSHAKE_MESSAGE = "OHOS HDC";  // sep not char '-', not more than 11 bytes
+const string CMDSTR_SOFTWARE_VERSION = "version";
+const string CMDSTR_SOFTWARE_HELP = "help";
+const string CMDSTR_SERVICE_KILL = "kill";
+const string CMDSTR_LIST_TARGETS = "list targets";
+const string CMDSTR_WAIT_FOR = "wait";
+const string CMDSTR_CONNECT_TARGET = "tconn";
+const string CMDSTR_CONNECT_ANY = "any";
+const string CMDSTR_SHELL = "shell";
+const string CMDSTR_HILOG = "hilog";
+const string CMDSTR_APP_INSTALL = "install";
 namespace Base {
     bool g_isBackgroundServer = false;
     bool g_encryptTCPSwitch = false;
