@@ -13,10 +13,12 @@
  * limitations under the License.
  */
 
+#include <cstdlib>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "daemon_tcp.h"
+#include "system_depend.h"
 
 using namespace testing::ext;
 using namespace testing;
@@ -53,7 +55,15 @@ HWTEST_F(HdcDaemonTCPTest, BuildUDPReplyPayload_NoCrash, TestSize.Level0)
 HWTEST_F(HdcDaemonTCPTest, Constructor_DaemonMode_DefaultPort, TestSize.Level0)
 {
     HdcDaemonTCP t(false, nullptr);
+#if defined(HARMONY_PROJECT)
+    std::string portStr;
+    SystemDepend::GetDevItem("persist.hdc.port", portStr);
+    int port = std::atoi(portStr.c_str());
+    uint16_t expected = port > 0 ? static_cast<uint16_t>(port) : 0;
+    EXPECT_EQ(t.tcpListenPort, expected);
+#else
     EXPECT_EQ(t.tcpListenPort, 0u);
+#endif
 }
 
 // TransmitConfig：addrSrc=nullptr → 早返回，不崩溃
