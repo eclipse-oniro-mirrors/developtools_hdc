@@ -35,7 +35,7 @@ constexpr uint16_t MAX_LOG_FILE_COUNT = 30;
 constexpr uint64_t MAX_LOG_FILE_SIZE = static_cast<uint64_t>(100) * 1024 * 1024; // 100MB
 constexpr uint64_t MAX_LOG_DIR_SIZE = static_cast<uint64_t>(3) * 1024 * 1024 * 1024; // 3GB
 constexpr bool ENABLE_IO_CHECKSUM = false;
-const string IPV4_MAPPING_PREFIX = "::ffff:";
+extern const string IPV4_MAPPING_PREFIX;
 const string DEFAULT_SERVER_ADDR_IP = "::ffff:127.0.0.1";
 const string DEFAULT_SERVER_ADDR = "::ffff:127.0.0.1:8710";
 const string ENV_SERVER_PORT = "OHOS_HDC_SERVER_PORT";
@@ -138,7 +138,7 @@ const string HDC_HOST_DAEMON_BUF_SEPARATOR = "\f";
 constexpr int32_t RSA_KEY_BITS = 3072;
 
 const string WHITE_SPACES = " \t\n\r";
-const string UT_TMP_PATH = "/tmp/hdc-ut";
+extern const string UT_TMP_PATH;
 #ifdef UPDATER_MODE
 const string DEBUG_BUNDLE_PATH = "/mnt/debug/100/debug_hap/";
 #else
@@ -152,9 +152,9 @@ const string LOG_COMPRESS_TOOL_NAME = "tar";
 const string LOG_CACHE_NAME = ".hdc.cache.log";
 const string LOG_DIR_NAME = "hdc_logs";
 const string LOG_COMPRESS_TOOL_PARAMS = "czfp";
-const string SERVER_NAME = "HDCServer";
-const string STRING_EMPTY = "";
-const string HANDSHAKE_MESSAGE = "OHOS HDC";  // sep not char '-', not more than 11 bytes
+extern const string SERVER_NAME;
+extern const string STRING_EMPTY;
+extern const string HANDSHAKE_MESSAGE;  // sep not char '-', not more than 11 bytes
 const string HANDSHAKE_FAILED = "HS FAILED";
 const string PACKET_FLAG = "HW";              // Must be 2 bytes, representing the abbreviation for hdc work
 const string EMPTY_ECHO = "[Empty]";
@@ -170,28 +170,28 @@ const size_t SERVICE_KILL_OFFSET = 10;
 const char SERVICE_KILL_TAG = 'K';
 #endif
 // input command
-const string CMDSTR_SOFTWARE_VERSION = "version";
-const string CMDSTR_SOFTWARE_HELP = "help";
+extern const string CMDSTR_SOFTWARE_VERSION;
+extern const string CMDSTR_SOFTWARE_HELP;
 const string CMDSTR_TARGET_DISCOVER = "discover";
 const string CMDSTR_SERVICE_START = "start";
-const string CMDSTR_SERVICE_KILL = "kill";
+extern const string CMDSTR_SERVICE_KILL;
 const string CMDSTR_SERVER_LOG_LEVEL = "server loglevel";
 const string CMDSTR_GENERATE_KEY = "keygen";
-const string CMDSTR_LIST_TARGETS = "list targets";
+extern const string CMDSTR_LIST_TARGETS;
 const string CMDSTR_CHECK_SERVER = "checkserver";
 const string CMDSTR_CHECK_DEVICE = "checkdevice";
-const string CMDSTR_WAIT_FOR = "wait";
-const string CMDSTR_CONNECT_TARGET = "tconn";
-const string CMDSTR_CONNECT_ANY = "any";
+extern const string CMDSTR_WAIT_FOR;
+extern const string CMDSTR_CONNECT_TARGET;
+extern const string CMDSTR_CONNECT_ANY;
 const string CMDSTR_TARGET_RECONNECT = "reconnect";
-const string CMDSTR_SHELL = "shell";
+extern const string CMDSTR_SHELL;
 const string CMDSTR_SHELL_EX = "shell -";
 const string CMDSTR_TARGET_REBOOT = "target boot";
 const string CMDSTR_TARGET_MOUNT = "target mount";
 const string CMDSTR_STARTUP_MODE = "smode";
 const string CMDSTR_TARGET_MODE = "tmode";
 const string CMDSTR_BUGREPORT = "bugreport";
-const string CMDSTR_HILOG = "hilog";
+extern const string CMDSTR_HILOG;
 const string CMDSTR_TMODE_USB = "usb";
 #ifdef _WIN32
 const string HILOG_NAME = "hilog.exe";
@@ -217,7 +217,7 @@ const string CMDSTR_FILE_RECV = "file recv";
 const string CMDSTR_REMOTE_PARAMETER = "remote";
 const string CMDSTR_FORWARD_FPORT = "fport";
 const string CMDSTR_FORWARD_RPORT = "rport";
-const string CMDSTR_APP_INSTALL = "install";
+extern const string CMDSTR_APP_INSTALL;
 const string CMDSTR_APP_UNINSTALL = "uninstall";
 const string CMDSTR_APP_SIDELOAD = "sideload";
 const string CMDSTR_LIST_JDWP = "jpid";
