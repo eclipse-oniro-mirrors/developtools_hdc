@@ -757,6 +757,17 @@ int HdcHostUSB::OpenDeviceMyNeed(HUSB hUSB)
             hUSB->devHandle = nullptr;
             return ret;
         }
+#ifdef HOST_LINUX
+        // Linux usb_serial_simple may bind the HDC ff/50/01 interface before hdc.
+        // Let libusb detach it while claimed and restore it when the interface is released.
+        int autoDetachRet = libusb_set_auto_detach_kernel_driver(handle, 1);
+        if (autoDetachRet != LIBUSB_SUCCESS) {
+            WRITE_LOG(LOG_WARN,
+                "libusb_set_auto_detach_kernel_driver failed, ret %d (%s), interfaceNumber %d; "
+                "claim may fail if a kernel driver is active",
+                autoDetachRet, libusb_error_name(autoDetachRet), hUSB->interfaceNumber);
+        }
+#endif
         // USB filter rules are set according to specific device pedding device
         ret = libusb_claim_interface(handle, hUSB->interfaceNumber);
         WRITE_LOG(LOG_DEBUG, "libusb_claim_interface ret %d, interfaceNumber %d",
