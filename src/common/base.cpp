@@ -47,6 +47,38 @@
 using namespace std::chrono;
 
 namespace Hdc {
+
+const string UDS_PATH = "/data/hdc/hdc_debug/hdc_server";
+const string UDS_STR = "uds";
+
+const string CMDSTR_REMOTE_PARAMETER = "remote";
+
+const string CMDSTR_SERVICE_START = "start";
+const string CMDSTR_TARGET_RECONNECT = "reconnect";
+const string CMDSTR_SPAWN_SUB = "spawn-sub";
+
+const string PACKET_FLAG = "HW";              // Must be 2 bytes, representing the abbreviation for hdc work
+const string EMPTY_ECHO = "[Empty]";
+const string MESSAGE_FAIL = "[Fail]";
+const string MESSAGE_SUCCESS = "[Success]";
+const string CMDSTR_TARGET_DISCOVER = "discover";
+const string CMDSTR_SERVER_LOG_LEVEL = "server loglevel";
+const string CMDSTR_CHECK_SERVER = "checkserver";
+const string CMDSTR_CHECK_DEVICE = "checkdevice";
+const string CMDSTR_SHELL_EX = "shell -";
+const string CMDSTR_TARGET_REBOOT = "target boot";
+const string CMDSTR_TARGET_MOUNT = "target mount";
+const string CMDSTR_TARGET_MODE = "tmode";
+const string CMDSTR_BUGREPORT = "bugreport";
+const string CMDSTR_TMODE_USB = "usb";
+const string CMDSTR_FILE_SEND = "file send";
+const string CMDSTR_FILE_RECV = "file recv";
+const string CMDSTR_FORWARD_FPORT = "fport";
+const string CMDSTR_FORWARD_RPORT = "rport";
+const string CMDSTR_APP_UNINSTALL = "uninstall";
+const string CMDSTR_APP_SIDELOAD = "sideload";
+const string CMDSTR_LIST_JDWP = "jpid";
+const string CMDSTR_TRACK_JDWP = "track-jpid";
 const string IPV4_MAPPING_PREFIX = "::ffff:";
 const string UT_TMP_PATH = "/tmp/hdc-ut";
 const string SERVER_NAME = "HDCServer";

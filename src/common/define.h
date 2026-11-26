@@ -46,8 +46,8 @@ const string ENV_ENCRYPT_CHANNEL = "OHOS_HDC_ENCRYPT_CHANNEL"; // 1: turn on enc
 const string STR_PSK_IDENTITY = "Client_identity";
 const string TLS_AES_128_GCM_SHA256 = "TLS_AES_128_GCM_SHA256";
 #ifdef __OHOS__
-const string UDS_PATH = "/data/hdc/hdc_debug/hdc_server";
-const string UDS_STR = "uds";
+extern const string UDS_PATH;
+extern const string UDS_STR;
 #endif
 
 // ################################ macro define ###################################
@@ -156,11 +156,11 @@ extern const string SERVER_NAME;
 extern const string STRING_EMPTY;
 extern const string HANDSHAKE_MESSAGE;  // sep not char '-', not more than 11 bytes
 const string HANDSHAKE_FAILED = "HS FAILED";
-const string PACKET_FLAG = "HW";              // Must be 2 bytes, representing the abbreviation for hdc work
-const string EMPTY_ECHO = "[Empty]";
+extern const string PACKET_FLAG;  // Must be 2 bytes, representing the abbreviation for hdc work
+extern const string EMPTY_ECHO;
 const string MESSAGE_INFO = "[Info]";
-const string MESSAGE_FAIL = "[Fail]";
-const string MESSAGE_SUCCESS = "[Success]";
+extern const string MESSAGE_FAIL;
+extern const string MESSAGE_SUCCESS;
 const char HUGE_BUF_TAG = 'H';                // support huge buffer
 const size_t BANNER_FEATURE_TAG_OFFSET = 11;
 const char WAIT_DEVICE_TAG = 'W';
@@ -172,27 +172,27 @@ const char SERVICE_KILL_TAG = 'K';
 // input command
 extern const string CMDSTR_SOFTWARE_VERSION;
 extern const string CMDSTR_SOFTWARE_HELP;
-const string CMDSTR_TARGET_DISCOVER = "discover";
-const string CMDSTR_SERVICE_START = "start";
+extern const string CMDSTR_TARGET_DISCOVER;
+extern const string CMDSTR_SERVICE_START;
 extern const string CMDSTR_SERVICE_KILL;
-const string CMDSTR_SERVER_LOG_LEVEL = "server loglevel";
+extern const string CMDSTR_SERVER_LOG_LEVEL;
 const string CMDSTR_GENERATE_KEY = "keygen";
 extern const string CMDSTR_LIST_TARGETS;
-const string CMDSTR_CHECK_SERVER = "checkserver";
-const string CMDSTR_CHECK_DEVICE = "checkdevice";
+extern const string CMDSTR_CHECK_SERVER;
+extern const string CMDSTR_CHECK_DEVICE;
 extern const string CMDSTR_WAIT_FOR;
 extern const string CMDSTR_CONNECT_TARGET;
 extern const string CMDSTR_CONNECT_ANY;
-const string CMDSTR_TARGET_RECONNECT = "reconnect";
+extern const string CMDSTR_TARGET_RECONNECT;
 extern const string CMDSTR_SHELL;
-const string CMDSTR_SHELL_EX = "shell -";
-const string CMDSTR_TARGET_REBOOT = "target boot";
-const string CMDSTR_TARGET_MOUNT = "target mount";
+extern const string CMDSTR_SHELL_EX;
+extern const string CMDSTR_TARGET_REBOOT;
+extern const string CMDSTR_TARGET_MOUNT;
 const string CMDSTR_STARTUP_MODE = "smode";
-const string CMDSTR_TARGET_MODE = "tmode";
-const string CMDSTR_BUGREPORT = "bugreport";
+extern const string CMDSTR_TARGET_MODE;
+extern const string CMDSTR_BUGREPORT;
 extern const string CMDSTR_HILOG;
-const string CMDSTR_TMODE_USB = "usb";
+extern const string CMDSTR_TMODE_USB;
 #ifdef _WIN32
 const string HILOG_NAME = "hilog.exe";
 const string SPLIT = "\\";
@@ -212,16 +212,16 @@ const string CMDSTR_TMODE_TCP = "tcp";
 #ifdef HDC_EMULATOR
 const string CMDSTR_TMODE_BRIDGE = "bridge";
 #endif
-const string CMDSTR_FILE_SEND = "file send";
-const string CMDSTR_FILE_RECV = "file recv";
-const string CMDSTR_REMOTE_PARAMETER = "remote";
-const string CMDSTR_FORWARD_FPORT = "fport";
-const string CMDSTR_FORWARD_RPORT = "rport";
+extern const string CMDSTR_FILE_SEND;
+extern const string CMDSTR_FILE_RECV;
+extern const string CMDSTR_REMOTE_PARAMETER;
+extern const string CMDSTR_FORWARD_FPORT;
+extern const string CMDSTR_FORWARD_RPORT;
 extern const string CMDSTR_APP_INSTALL;
-const string CMDSTR_APP_UNINSTALL = "uninstall";
-const string CMDSTR_APP_SIDELOAD = "sideload";
-const string CMDSTR_LIST_JDWP = "jpid";
-const string CMDSTR_TRACK_JDWP = "track-jpid";
+extern const string CMDSTR_APP_UNINSTALL;
+extern const string CMDSTR_APP_SIDELOAD;
+extern const string CMDSTR_LIST_JDWP;
+extern const string CMDSTR_TRACK_JDWP;
 const string CMDSTR_INNER_ENABLE_KEEPALIVE = "alive";
 const string CMDSTR_FLASHD_UPDATE = "update";
 const string CMDSTR_FLASHD_FLASH = "flash";
@@ -229,7 +229,7 @@ const string CMDSTR_FLASHD_ERASE = "erase";
 const string CMDSTR_FLASHD_FORMAT = "format";
 const string STR_FEATURE_ENABLE = "enable";
 const string STR_FEATURE_DISABLE = "disable";
-const string CMDSTR_SPAWN_SUB = "spawn-sub";
+extern const string CMDSTR_SPAWN_SUB;
 const string CMDSTR_KILLALL_SUB = "killall-sub";
 // ################################ Error Message ###################################
 const string TERMINAL_HDC_PROCESS_FAILED = "[E002101]:Terminal hdc process failed, "\
