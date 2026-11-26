@@ -1303,24 +1303,29 @@ bool HdcDaemon::CheckAuthStatus(HSession hSession, const uint32_t channelId, con
     return true;
 }
 
-static std::map<uint16_t, std::string> DaemonReportMap = {
-    {HdcCommand::CMD_UNITY_EXECUTE, CMDSTR_SHELL},
-    {HdcCommand::CMD_UNITY_EXECUTE_EX, CMDSTR_SHELL},
-    {HdcCommand::CMD_KERNEL_TARGET_CONNECT, CMDSTR_CONNECT_TARGET},
-    {HdcCommand::CMD_SHELL_INIT, CMDSTR_SHELL},
-    {HdcCommand::CMD_UNITY_RUNMODE, CMDSTR_TARGET_MODE},
-    {HdcCommand::CMD_APP_CHECK, CMDSTR_APP_INSTALL},
-    {HdcCommand::CMD_APP_UNINSTALL, CMDSTR_APP_UNINSTALL},
-    {HdcCommand::CMD_FORWARD_INIT, CMDSTR_FORWARD_RPORT},
-    {HdcCommand::CMD_UNITY_HILOG, CMDSTR_HILOG},
-    {HdcCommand::CMD_JDWP_LIST, CMDSTR_LIST_JDWP},
-    {HdcCommand::CMD_JDWP_TRACK, CMDSTR_TRACK_JDWP},
-    {HdcCommand::CMD_UNITY_REMOUNT, CMDSTR_TARGET_MOUNT},
-    {HdcCommand::CMD_UNITY_REBOOT, CMDSTR_TARGET_REBOOT},
-    {HdcCommand::CMD_UNITY_BUGREPORT_INIT, CMDSTR_BUGREPORT},
-};
-
 #ifdef HDC_SUPPORT_REPORT_COMMAND_EVENT
+// Lazy init: CMDSTR_* constants are defined in base.cpp, cross-TU init order is unspecified
+static const std::map<uint16_t, std::string> &GetDaemonReportMap()
+{
+    static const std::map<uint16_t, std::string> daemonReportMap = {
+        {HdcCommand::CMD_UNITY_EXECUTE, CMDSTR_SHELL},
+        {HdcCommand::CMD_UNITY_EXECUTE_EX, CMDSTR_SHELL},
+        {HdcCommand::CMD_KERNEL_TARGET_CONNECT, CMDSTR_CONNECT_TARGET},
+        {HdcCommand::CMD_SHELL_INIT, CMDSTR_SHELL},
+        {HdcCommand::CMD_UNITY_RUNMODE, CMDSTR_TARGET_MODE},
+        {HdcCommand::CMD_APP_CHECK, CMDSTR_APP_INSTALL},
+        {HdcCommand::CMD_APP_UNINSTALL, CMDSTR_APP_UNINSTALL},
+        {HdcCommand::CMD_FORWARD_INIT, CMDSTR_FORWARD_RPORT},
+        {HdcCommand::CMD_UNITY_HILOG, CMDSTR_HILOG},
+        {HdcCommand::CMD_JDWP_LIST, CMDSTR_LIST_JDWP},
+        {HdcCommand::CMD_JDWP_TRACK, CMDSTR_TRACK_JDWP},
+        {HdcCommand::CMD_UNITY_REMOUNT, CMDSTR_TARGET_MOUNT},
+        {HdcCommand::CMD_UNITY_REBOOT, CMDSTR_TARGET_REBOOT},
+        {HdcCommand::CMD_UNITY_BUGREPORT_INIT, CMDSTR_BUGREPORT},
+    };
+    return daemonReportMap;
+}
+
 static std::string GetReportInfo(const uint16_t command, uint8_t *payload, const int payloadSize)
 {
     std::string info;
@@ -1358,8 +1363,9 @@ static std::string GetReportInfo(const uint16_t command, uint8_t *payload, const
 static bool ReportCommandEvent(const uint16_t command, uint8_t *payload, const int payloadSize, bool isIntercepted)
 {
 #ifdef HDC_SUPPORT_REPORT_COMMAND_EVENT
-    auto it = Hdc::DaemonReportMap.find(command);
-    if (it == Hdc::DaemonReportMap.end()) {
+    const std::map<uint16_t, std::string> &reportMap = GetDaemonReportMap();
+    auto it = reportMap.find(command);
+    if (it == reportMap.end()) {
         return true;
     }
     if (it->second == "") {
