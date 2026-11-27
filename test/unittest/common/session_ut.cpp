@@ -701,6 +701,19 @@ HWTEST_F(HdcSessionBaseTest, AdminSession_QueryRefKnown, TestSize.Level0)
     s.AdminSession(OP_REMOVE, 300, nullptr);
 }
 
+// AdminSession: OP_QUERY_REF on a dead session returns null without bumping ref
+HWTEST_F(HdcSessionBaseTest, AdminSession_QueryRefDeadSession, TestSize.Level0)
+{
+    HdcSessionBase s(false, 1);
+    HdcSession hs;
+    hs.sessionId = 301;
+    hs.isDead = true;
+    s.AdminSession(OP_ADD, 301, &hs);
+    EXPECT_EQ(s.AdminSession(OP_QUERY_REF, 301, nullptr), nullptr);
+    EXPECT_EQ(uint32_t(hs.ref), 0u);
+    s.AdminSession(OP_REMOVE, 301, nullptr);
+}
+
 // AdminSession：OP_UPDATE 用新 session 替换旧 session
 HWTEST_F(HdcSessionBaseTest, AdminSession_Update, TestSize.Level0)
 {

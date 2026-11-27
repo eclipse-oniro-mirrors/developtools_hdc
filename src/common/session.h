@@ -217,6 +217,7 @@ protected:
 
 private:
     HTaskInfo AdminTask(const uint8_t op, HSession hSession, const uint32_t channelId, HTaskInfo hInput);
+    HSession QuerySessionWithRef(const uint32_t sessionId);
     virtual void ClearInstanceResource()
     {
     }
@@ -249,7 +250,6 @@ private:
     const uint8_t payloadProtectStaticVcode = 0x09;
     uv_thread_t threadSessionMain;
     size_t threadPoolCount;
-    std::atomic<uint32_t> taskCount = 0;
     uint64_t freeBegin = 0;
 };
 }  // namespace Hdc
