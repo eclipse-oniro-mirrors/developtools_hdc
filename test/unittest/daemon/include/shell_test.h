@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include "shell.h"
 #include "task.h"
+#include "session.h"
 
 namespace Hdc {
 
@@ -29,8 +30,9 @@ public:
     void TearDown();
 
 protected:
-    HdcShell *shell;
-    HTaskInfo taskInfo;
+    HdcShell *shell = nullptr;
+    HTaskInfo taskInfo = nullptr;
+    HdcSessionBase *sessionBase = nullptr;
 };
 
 } // namespace Hdc

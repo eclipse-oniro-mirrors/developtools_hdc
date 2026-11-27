@@ -51,6 +51,8 @@ void ShellTest::TearDownTestCase() {}
 void ShellTest::SetUp()
 {
     taskInfo = new TaskInformation();
+    sessionBase = new HdcSessionBase(false);
+    taskInfo->ownerSessionClass = sessionBase;
     taskInfo->channelId = 1;
     taskInfo->sessionId = 1;
     shell = new HdcShell(taskInfo);
@@ -65,6 +67,10 @@ void ShellTest::TearDown()
     if (taskInfo != nullptr) {
         delete taskInfo;
         taskInfo = nullptr;
+    }
+    if (sessionBase != nullptr) {
+        delete sessionBase;
+        sessionBase = nullptr;
     }
 }
 
